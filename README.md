@@ -17,30 +17,35 @@ instead of copy-pasting between a terminal and a chat app.
 Anthropic.** "Claude" and "Claude Code" are trademarks of Anthropic, PBC, used
 here only to describe interoperability.
 
-## What works today (Milestone 1)
+## What works today (Milestone 2)
 
-- Create a room and get a secure, expiring, revocable invitation link
-- A collaborator joins from a browser; both see presence in real time
-- Real-time chat with strict ordering and reconnect catch-up
+- **The host lives in a desktop app**: open ClaudeRooms.app, pick your
+  repository folder with a native dialog, create a room — no terminal
+  commands, no browser forms (ADR-0007)
+- **Guests need only a browser**: secure, expiring, revocable invitation
+  links; zero install for collaborators
+- Real-time chat with presence, strict ordering, and reconnect catch-up
 - Explicit **Ask Claude** requests — ordinary chat is never sent to Claude
 - Streamed Claude responses via a deterministic **fake adapter** (the real
-  Claude Agent SDK integration is Milestone 3; see the
-  [build plan](docs/product/build-plan.md))
+  Claude Agent SDK integration working on your picked repository is
+  Milestone 3; see the [build plan](docs/product/build-plan.md))
 - Decisions as first-class objects: propose from a message, host accepts or
   rejects, accepted decisions persist in a panel
 - Host can end the room, which revokes invitations and closes the room
 - Everything persists locally in SQLite; every event is auditable
+- The app only ever shares your repo's **name and branch** — the absolute
+  path never leaves the app process (enforced and tested)
 
 ## Architecture in one picture
 
 ```
-Browser ⇄ (typed, validated WebSocket protocol) ⇄ Collaboration server (SQLite)
-                                                        ⇅ (Milestone 2+)
-                                     Local bridge on the host ⇄ Claude adapter
+ClaudeRooms.app (host) ──┐
+  repo path stays here   ├─ Collaboration engine (typed WS protocol, SQLite)
+Guest browser ───────────┘        └─ Claude adapter (fake now, Agent SDK M3)
 ```
 
-The local bridge is the gatekeeper: remote participants and the server never
-get direct access to the host's machine. Details:
+The app process is the gatekeeper: guests and the engine never get direct
+access to the host's machine or the repository path. Details:
 [system overview](docs/architecture/system-overview.md) ·
 [protocol](docs/architecture/protocol.md) ·
 [threat model](docs/security/threat-model.md).
@@ -56,13 +61,16 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:5173, create a room, copy the invitation link, and open
-it in a second browser (or a private window) to join as the collaborator.
+`pnpm dev` starts the engine, the web client, and **opens the ClaudeRooms
+app window**. In the app: pick your repository folder, create the room, and
+copy the invitation link. Open the link in any browser (or a private window)
+to join as the collaborator. Packaged, downloadable builds arrive with
+Milestone 4 — until then the app runs from source.
 
 Development commands:
 
 ```bash
-pnpm dev        # server (:3001) + web (:5173) with proxy
+pnpm dev        # engine (:3001) + web (:5173) + the desktop app window
 pnpm test       # unit + integration + E2E-flow + security tests
 pnpm lint
 pnpm typecheck

@@ -1,0 +1,20 @@
+{
+  "name": "@clauderooms/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ClaudeRooms host application (Electron shell)",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "dev": "node build.mjs && electron .",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "build": "node build.mjs && tsc --noEmit",
+    "test": "echo \"no desktop tests yet (see docs/product/build-plan.md M4)\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "electron": "^33.3.1",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

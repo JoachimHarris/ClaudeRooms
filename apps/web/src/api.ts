@@ -42,7 +42,12 @@ async function postJson<T>(
   return schema.parse(json);
 }
 
-export function createRoom(input: { roomName: string; displayName: string }) {
+export function createRoom(input: {
+  roomName: string;
+  displayName: string;
+  repositoryName?: string;
+  branchName?: string;
+}) {
   return postJson("/api/rooms", input, createRoomResponseSchema);
 }
 

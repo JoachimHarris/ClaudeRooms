@@ -212,6 +212,44 @@ describe("security boundaries", () => {
     expect(client.closeCode).toBe(1008);
   });
 
+  it("rejects repository metadata that smells like a local path", async () => {
+    // The desktop app must only ever send display metadata — the server
+    // refuses anything that could carry an absolute path or traversal.
+    const absolutePath = await post(server.baseUrl, "/api/rooms", {
+      roomName: "Repo",
+      displayName: "Hosty",
+      repositoryName: "/Users/joachim/secret-repo",
+    });
+    expect(absolutePath.status).toBe(400);
+
+    const backslashes = await post(server.baseUrl, "/api/rooms", {
+      roomName: "Repo",
+      displayName: "Hosty",
+      repositoryName: "C:\\Users\\joachim\\repo",
+    });
+    expect(backslashes.status).toBe(400);
+
+    const traversingBranch = await post(server.baseUrl, "/api/rooms", {
+      roomName: "Repo",
+      displayName: "Hosty",
+      repositoryName: "clauderooms",
+      branchName: "../../etc/passwd",
+    });
+    expect(traversingBranch.status).toBe(400);
+
+    // Plain display metadata round-trips onto the room view.
+    const valid = await post(server.baseUrl, "/api/rooms", {
+      roomName: "Repo",
+      displayName: "Hosty",
+      repositoryName: "clauderooms",
+      branchName: "feature/desktop-app",
+    });
+    expect(valid.status).toBe(201);
+    const room = createRoomResponseSchema.parse(valid.json).room;
+    expect(room.repositoryName).toBe("clauderooms");
+    expect(room.branchName).toBe("feature/desktop-app");
+  });
+
   it("never exposes raw tokens through the API surface", async () => {
     const created = await createRoom(server);
     // The only place tokens exist server-side is as sha256 hashes.

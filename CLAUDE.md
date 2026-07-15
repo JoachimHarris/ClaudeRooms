@@ -10,8 +10,10 @@ README and UI.
 
 ## Current stage
 
-Milestone 1 complete (local rooms, chat, fake Claude adapter, decisions).
-Next: Milestone 2 (local bridge). Roadmap: `docs/product/build-plan.md`.
+Milestone 2 complete: desktop-first (ADR-0007). Hosts use the Electron app
+(`apps/desktop`) with a native repo picker; browsers are guest-join only.
+Next: Milestone 3 (real Claude via the Agent SDK inside the app, hybrid
+timeline with work cards). Roadmap: `docs/product/build-plan.md`.
 Product truth lives in `docs/product/`, architecture in `docs/architecture/`,
 security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
 
@@ -19,10 +21,14 @@ security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
 
 - `packages/shared` — domain types + zod protocol. **Single source of truth
   for the wire format**; change it here first, never ad-hoc in apps.
-- `apps/server` — Fastify + WebSocket + SQLite. `src/rooms.ts` (domain),
-  `src/ws.ts` (transport), `src/claude/` (adapter boundary), `src/db.ts`.
-- `apps/web` — Vite + React SPA, plain CSS tokens, hand-rolled 3-route
-  router.
+- `apps/server` — Fastify + WebSocket + SQLite engine. `src/rooms.ts`
+  (domain), `src/ws.ts` (transport), `src/claude/` (adapter boundary),
+  `src/lib.ts` (embedding entry for the desktop app).
+- `apps/web` — Vite + React SPA. Renders inside the desktop app (host mode,
+  detected via `window.clauderooms`) and in plain browsers (guest mode).
+- `apps/desktop` — Electron host app. `src/main.ts` keeps the absolute repo
+  path; only display metadata crosses to renderer/server. Security posture
+  (contextIsolation, sandbox, navigation lock) must never be weakened.
 
 ## Commands
 

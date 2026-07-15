@@ -1,27 +1,30 @@
 # System overview
 
+Desktop-first since Milestone 2 (ADR-0007): the host lives in
+ClaudeRooms.app; guests join from a plain browser.
+
 ## Components
 
 ```text
-┌────────────────────────────────────────────┐
-│ Browser client (apps/web)                  │
-│ Chat · participants · decisions · approval │
-└─────────────────────┬──────────────────────┘
-                      │ HTTPS / WebSocket (typed, validated protocol)
-┌─────────────────────▼──────────────────────┐
-│ Collaboration server (apps/server)         │
-│ Rooms · invitations · events · SQLite      │
-└─────────────────────┬──────────────────────┘
-                      │ authenticated outbound channel (Milestone 2+)
-┌─────────────────────▼──────────────────────┐
-│ Local ClaudeRooms bridge (host machine)    │
-│ Host authorization · redaction · repo info │
-└───────────────┬────────────────────────────┘
-                │
-┌───────────────▼────────────────────────────┐
-│ Claude adapter                             │
-│ Fake adapter (M1) · Agent SDK (M3+)        │
-└────────────────────────────────────────────┘
+Host machine                                     Guest machine
+┌───────────────────────────────────────┐        ┌──────────────────────────┐
+│ ClaudeRooms.app (apps/desktop)        │        │ Browser (apps/web,       │
+│ ┌───────────────────────────────────┐ │        │ guest mode: join + chat) │
+│ │ Renderer = apps/web (host mode)   │ │        └───────────┬──────────────┘
+│ │ Chat · decisions · approvals      │ │                    │ HTTPS / WS
+│ └───────────────┬───────────────────┘ │                    │ (relay in M4)
+│   preload bridge│(pickRepo only)      │                    │
+│ ┌───────────────▼───────────────────┐ │                    │
+│ │ Main process: repo path stays here│ │                    │
+│ └───────────────┬───────────────────┘ │                    │
+│                 │ display metadata     │                    │
+│ ┌───────────────▼───────────────────┐ │                    │
+│ │ Collaboration engine (apps/server)│◄┼────────────────────┘
+│ │ Rooms · invitations · events ·    │ │  typed, zod-validated protocol
+│ │ SQLite · Claude adapter boundary  │ │
+│ │ (fake M1–M2 · Agent SDK M3+)      │ │
+│ └───────────────────────────────────┘ │
+└───────────────────────────────────────┘
 ```
 
 ## Trust boundaries
@@ -39,10 +42,17 @@
    env). Claude's tool use is gated by the bridge via the Agent SDK's
    `canUseTool` / hooks; discussion-only requests run without tools.
 
-In Milestone 1 the server and "bridge" run in the same local process, but the
-code keeps the boundary: nothing in the room/event layer may reach the
-filesystem, and the Claude adapter is invoked only through the
-`ClaudeAdapter` interface.
+In Milestones 1–2 the engine runs as a plain process alongside the app (in
+dev, `pnpm dev` starts engine + web + app), but the code keeps the boundary:
+nothing in the room/event layer may reach the filesystem, the Claude adapter
+is invoked only through the `ClaudeAdapter` interface, and the Electron main
+process is the sole holder of the absolute repository path (`4.` below).
+
+4. **App shell ↔ everything else.** The renderer runs with
+   `contextIsolation` + `sandbox`, no Node access, and a single preload API
+   (`pickRepo`). The server and renderer receive only display metadata
+   (repo basename + branch), enforced by protocol validation and covered by
+   security tests.
 
 ## Repository layout
 

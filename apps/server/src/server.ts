@@ -20,6 +20,11 @@ export async function buildServer(options: {
   config: ServerConfig;
   adapter?: ClaudeAdapter;
   logger?: boolean;
+  /**
+   * Serve the built web client from this directory (packaged desktop mode).
+   * Dev keeps using the Vite server instead.
+   */
+  staticDir?: string;
 }): Promise<BuiltServer> {
   const app = Fastify({
     logger: options.logger
@@ -53,6 +58,20 @@ export async function buildServer(options: {
     registerWs(instance, { rooms, hub, config: options.config });
   });
   registerHttpRoutes(app, { rooms, hub });
+
+  if (options.staticDir) {
+    const { default: fastifyStatic } = await import("@fastify/static");
+    await app.register(fastifyStatic, { root: options.staticDir });
+    // SPA fallback: any non-API, non-WS route serves the client shell.
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith("/api/") || request.url.startsWith("/ws")) {
+        return reply
+          .status(404)
+          .send({ error: { code: "ROOM_NOT_FOUND", message: "Not found" } });
+      }
+      return reply.sendFile("index.html");
+    });
+  }
 
   app.addHook("onClose", async () => {
     await adapter.close();

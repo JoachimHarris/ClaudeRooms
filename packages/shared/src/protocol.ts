@@ -222,9 +222,34 @@ export type ServerFrame = z.infer<typeof serverFrameSchema>;
 
 const displayNameSchema = z.string().trim().min(1).max(LIMITS.maxNameLength);
 
+// Repository metadata is *display metadata only*. It must never be able to
+// smuggle a local filesystem path to the server: no separators in the repo
+// name, no traversal or leading slash in the branch name.
+const repositoryNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[^/\\]+$/, "repository name must not contain path separators")
+  .refine((value) => !value.startsWith("."), {
+    message: "repository name must not start with a dot",
+  });
+
+const branchNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[\w./-]+$/, "branch name contains invalid characters")
+  .refine((value) => !value.includes("..") && !value.startsWith("/"), {
+    message: "branch name must not traverse paths",
+  });
+
 export const createRoomBodySchema = z.object({
   roomName: z.string().trim().min(1).max(LIMITS.maxNameLength),
   displayName: displayNameSchema,
+  repositoryName: repositoryNameSchema.optional(),
+  branchName: branchNameSchema.optional(),
 });
 
 export const joinRoomBodySchema = z.object({

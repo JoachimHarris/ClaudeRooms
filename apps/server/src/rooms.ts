@@ -249,7 +249,12 @@ export class RoomService {
 
   // -- rooms & membership ---------------------------------------------------
 
-  createRoom(input: { roomName: string; displayName: string }): {
+  createRoom(input: {
+    roomName: string;
+    displayName: string;
+    repositoryName?: string | undefined;
+    branchName?: string | undefined;
+  }): {
     room: RoomView;
     participant: Omit<ParticipantView, "connected">;
     sessionToken: string;
@@ -267,9 +272,18 @@ export class RoomService {
     this.db.transaction(() => {
       this.db
         .prepare(
-          "INSERT INTO rooms (id, name, status, host_participant_id, created_at) VALUES (?, ?, 'open', ?, ?)",
+          `INSERT INTO rooms
+             (id, name, status, host_participant_id, repository_name, branch_name, created_at)
+           VALUES (?, ?, 'open', ?, ?, ?, ?)`,
         )
-        .run(roomId, input.roomName, participantId, createdAt);
+        .run(
+          roomId,
+          input.roomName,
+          participantId,
+          input.repositoryName ?? null,
+          input.branchName ?? null,
+          createdAt,
+        );
       this.db
         .prepare(
           "INSERT INTO participants (id, room_id, display_name, role, session_token_hash, joined_at) VALUES (?, ?, ?, 'host', ?, ?)",
