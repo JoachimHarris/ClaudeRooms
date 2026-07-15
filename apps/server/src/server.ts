@@ -5,6 +5,7 @@ import { RoomService } from "./rooms.js";
 import { RoomHub } from "./hub.js";
 import { registerHttpRoutes } from "./http.js";
 import { registerWs } from "./ws.js";
+import { registerBridgeWs } from "./ws-bridge.js";
 import type { ClaudeAdapter } from "./claude/adapter.js";
 import { FakeClaudeAdapter } from "./claude/fake-adapter.js";
 import type { ServerConfig } from "./config.js";
@@ -56,6 +57,7 @@ export async function buildServer(options: {
   });
   await app.register(async (instance) => {
     registerWs(instance, { rooms, hub, config: options.config });
+    registerBridgeWs(instance, { rooms, hub });
   });
   registerHttpRoutes(app, { rooms, hub });
 

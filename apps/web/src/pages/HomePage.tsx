@@ -52,6 +52,13 @@ function HostHome() {
         inviteToken: result.inviteToken,
         inviteExpiresAt: result.inviteExpiresAt,
       });
+      // Hand the token to the main process so it can run Claude locally for
+      // this room. Failure here is not fatal: the room still works, Claude
+      // just falls back to the built-in fake adapter.
+      await window.clauderooms?.startBridge({
+        roomId: result.room.id,
+        sessionToken: result.sessionToken,
+      });
       navigate(`/room/${result.room.id}`);
     } catch (err) {
       setError(describeApiError(err));

@@ -10,10 +10,11 @@ README and UI.
 
 ## Current stage
 
-Milestone 2 complete: desktop-first (ADR-0007). Hosts use the Electron app
-(`apps/desktop`) with a native repo picker; browsers are guest-join only.
-Next: Milestone 3 (real Claude via the Agent SDK inside the app, hybrid
-timeline with work cards). Roadmap: `docs/product/build-plan.md`.
+Milestone 3 complete: real Claude runs on the host via the Agent SDK inside
+the desktop app, delegated over the `/bridge` endpoint; dark/light theming.
+Hosts use the Electron app (`apps/desktop`); browsers are guest-join only.
+Next: Milestone 4 (persistent left rail of rooms). Roadmap:
+`docs/product/build-plan.md`.
 Product truth lives in `docs/product/`, architecture in `docs/architecture/`,
 security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
 
@@ -27,8 +28,12 @@ security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
 - `apps/web` — Vite + React SPA. Renders inside the desktop app (host mode,
   detected via `window.clauderooms`) and in plain browsers (guest mode).
 - `apps/desktop` — Electron host app. `src/main.ts` keeps the absolute repo
-  path; only display metadata crosses to renderer/server. Security posture
-  (contextIsolation, sandbox, navigation lock) must never be weakened.
+  path; only display metadata crosses to renderer/server. `src/claude-runner.ts`
+  runs the real Claude (Agent SDK) — **its four discussion-only gates are
+  load-bearing and were each proven necessary; do not remove one without
+  re-running the CLAUDE.md leak test**. `src/bridge-client.ts` connects
+  outbound to the engine. Security posture (contextIsolation, sandbox,
+  navigation lock) must never be weakened.
 
 ## Commands
 

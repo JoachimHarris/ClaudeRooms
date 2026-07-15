@@ -1,13 +1,14 @@
 import type { AddressInfo } from "node:net";
 import WebSocket from "ws";
-import type { ServerFrame } from "@clauderooms/shared";
-import { serverFrameSchema } from "@clauderooms/shared";
+import type { BridgeServerFrame, ServerFrame } from "@clauderooms/shared";
+import { bridgeServerFrameSchema, serverFrameSchema } from "@clauderooms/shared";
 import { buildServer, type BuiltServer } from "../src/server.js";
 import { FakeClaudeAdapter } from "../src/claude/fake-adapter.js";
 
 export interface TestServer extends BuiltServer {
   baseUrl: string;
   wsUrl: string;
+  bridgeUrl: string;
   close: () => Promise<void>;
 }
 
@@ -26,6 +27,7 @@ export async function startTestServer(): Promise<TestServer> {
     ...built,
     baseUrl: `http://127.0.0.1:${address.port}`,
     wsUrl: `ws://127.0.0.1:${address.port}/ws`,
+    bridgeUrl: `ws://127.0.0.1:${address.port}/bridge`,
     close: () => built.app.close(),
   };
 }
@@ -135,6 +137,99 @@ export class TestClient {
         frame.event.type === type &&
         (extra ? extra(frame) : true),
     );
+  }
+
+  waitForClose(timeoutMs = 4000): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("Timed out waiting for close")),
+        timeoutMs,
+      );
+      this.socket.once("close", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
+  close(): void {
+    this.socket.close();
+  }
+}
+
+interface BridgeWaiter {
+  predicate: (frame: BridgeServerFrame) => boolean;
+  resolve: (frame: BridgeServerFrame) => void;
+}
+
+/**
+ * Stand-in for the Electron host bridge: connects to /bridge, authenticates,
+ * and lets a test script the "Claude" responses deterministically — the same
+ * delegation path the real Agent SDK bridge uses, with no paid API calls.
+ */
+export class TestBridge {
+  readonly frames: BridgeServerFrame[] = [];
+  private waiters: BridgeWaiter[] = [];
+  closed = false;
+  closeCode: number | null = null;
+
+  private constructor(readonly socket: WebSocket) {}
+
+  static async connect(bridgeUrl: string): Promise<TestBridge> {
+    const socket = new WebSocket(bridgeUrl);
+    const bridge = new TestBridge(socket);
+    socket.on("message", (raw) => {
+      const frame = bridgeServerFrameSchema.parse(JSON.parse(String(raw)));
+      bridge.frames.push(frame);
+      bridge.waiters = bridge.waiters.filter((waiter) => {
+        if (waiter.predicate(frame)) {
+          waiter.resolve(frame);
+          return false;
+        }
+        return true;
+      });
+    });
+    socket.on("close", (code) => {
+      bridge.closed = true;
+      bridge.closeCode = code;
+    });
+    await new Promise<void>((resolve, reject) => {
+      socket.once("open", () => resolve());
+      socket.once("error", reject);
+      socket.once("close", () => resolve());
+    });
+    return bridge;
+  }
+
+  send(frame: unknown): void {
+    this.socket.send(JSON.stringify(frame));
+  }
+
+  auth(token: string): void {
+    this.send({ type: "bridge.auth", protocolVersion: 1, token });
+  }
+
+  waitFor(
+    predicate: (frame: BridgeServerFrame) => boolean,
+    timeoutMs = 4000,
+  ): Promise<BridgeServerFrame> {
+    const existing = this.frames.find(predicate);
+    if (existing) return Promise.resolve(existing);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () =>
+          reject(new Error(`Timed out waiting for bridge frame after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+      this.waiters.push({
+        predicate,
+        resolve: (frame) => {
+          clearTimeout(timer);
+          resolve(frame);
+        },
+      });
+    });
   }
 
   waitForClose(timeoutMs = 4000): Promise<void> {

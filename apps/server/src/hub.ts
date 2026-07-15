@@ -2,8 +2,9 @@ import type { WebSocket } from "ws";
 import type { ProtocolEnvelope, ServerFrame } from "@clauderooms/shared";
 import type { RoomService } from "./rooms.js";
 import type { ClaudeAdapter } from "./claude/adapter.js";
+import type { BridgeConnection } from "./claude/bridge-adapter.js";
 
-const CLAUDE_REQUEST_TIMEOUT_MS = 60_000;
+const CLAUDE_REQUEST_TIMEOUT_MS = 120_000;
 
 interface LiveConnection {
   socket: WebSocket;
@@ -12,15 +13,43 @@ interface LiveConnection {
 
 /**
  * Tracks live sockets per room, fans out envelopes, derives presence, and
- * orchestrates Claude requests against the adapter.
+ * orchestrates Claude requests. Claude runs against the room's host bridge
+ * when one is connected (real Claude on the host machine); otherwise it falls
+ * back to the default adapter (the fake adapter — self-labelled in its
+ * output, and the path used by tests and browser-only usage).
  */
 export class RoomHub {
   private connections = new Map<string, Set<LiveConnection>>();
+  private bridges = new Map<string, BridgeConnection>();
 
   constructor(
     private readonly rooms: RoomService,
     private readonly adapter: ClaudeAdapter,
   ) {}
+
+  /** Register the host bridge for a room (replacing any previous one). */
+  registerBridge(roomId: string, bridge: BridgeConnection): void {
+    const existing = this.bridges.get(roomId);
+    if (existing) void existing.close();
+    this.bridges.set(roomId, bridge);
+  }
+
+  unregisterBridge(roomId: string, bridge: BridgeConnection): void {
+    if (this.bridges.get(roomId) === bridge) this.bridges.delete(roomId);
+    void bridge.close();
+  }
+
+  hasBridge(roomId: string): boolean {
+    return this.bridges.has(roomId);
+  }
+
+  getBridge(roomId: string): BridgeConnection | undefined {
+    return this.bridges.get(roomId);
+  }
+
+  private claudeRunner(roomId: string): ClaudeAdapter {
+    return this.bridges.get(roomId) ?? this.adapter;
+  }
 
   register(roomId: string, participantId: string, socket: WebSocket): void {
     let set = this.connections.get(roomId);
@@ -111,13 +140,14 @@ export class RoomHub {
     roomId: string;
     content: string;
   }): Promise<void> {
+    const runner = this.claudeRunner(input.roomId);
     const timeout = setTimeout(() => {
-      void this.adapter.cancelRequest(input.requestId);
+      void runner.cancelRequest(input.requestId);
     }, CLAUDE_REQUEST_TIMEOUT_MS);
 
     let terminal = false;
     try {
-      const events = this.adapter.submitRequest({
+      const events = runner.submitRequest({
         requestId: input.requestId,
         roomId: input.roomId,
         content: input.content,

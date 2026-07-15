@@ -217,6 +217,71 @@ export const serverFrameSchema = z.discriminatedUnion("type", [
 export type ServerFrame = z.infer<typeof serverFrameSchema>;
 
 // ---------------------------------------------------------------------------
+// Bridge protocol (host ↔ engine, separate /bridge endpoint)
+//
+// The bridge is how the host machine runs Claude against the local repository
+// without the engine ever seeing the repo path or credentials. Only the room
+// host (verified by session token) may connect. The engine forwards Claude
+// requests to the bridge; the bridge streams responses back. This is a
+// distinct frame set from the room protocol to keep the trust boundary sharp.
+// ---------------------------------------------------------------------------
+
+const requestIdSchema = z.string().uuid();
+
+/** host → engine */
+export const bridgeClientFrameSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("bridge.auth"),
+    protocolVersion: z.number().int(),
+    token: z.string().min(20).max(200),
+  }),
+  z.object({ type: z.literal("bridge.started"), requestId: requestIdSchema }),
+  z.object({
+    type: z.literal("bridge.delta"),
+    requestId: requestIdSchema,
+    text: z.string().max(LIMITS.maxMessageLength),
+  }),
+  z.object({
+    type: z.literal("bridge.completed"),
+    requestId: requestIdSchema,
+    text: z.string().max(LIMITS.maxMessageLength),
+  }),
+  z.object({
+    type: z.literal("bridge.failed"),
+    requestId: requestIdSchema,
+    failureCode: z.string().max(80),
+    message: z.string().max(500),
+  }),
+  z.object({ type: z.literal("bridge.ping") }),
+]);
+
+export type BridgeClientFrame = z.infer<typeof bridgeClientFrameSchema>;
+
+/** engine → host */
+export const bridgeServerFrameSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("bridge.ready"),
+    roomId: z.string().uuid(),
+    repositoryName: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("bridge.request"),
+    requestId: requestIdSchema,
+    content: z.string().max(LIMITS.maxMessageLength),
+    mode: z.literal("discussion_only"),
+  }),
+  z.object({ type: z.literal("bridge.cancel"), requestId: requestIdSchema }),
+  z.object({ type: z.literal("bridge.pong") }),
+  z.object({
+    type: z.literal("bridge.error"),
+    code: errorCodeSchema,
+    message: z.string(),
+  }),
+]);
+
+export type BridgeServerFrame = z.infer<typeof bridgeServerFrameSchema>;
+
+// ---------------------------------------------------------------------------
 // HTTP bodies and responses
 // ---------------------------------------------------------------------------
 

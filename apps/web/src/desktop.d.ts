@@ -11,6 +11,12 @@ interface ClaudeRoomsDesktopBridge {
   appVersion: string;
   /** Opens a native folder picker; resolves null if the user cancels. */
   pickRepo: () => Promise<DesktopRepoInfo | null>;
+  /** Lets the main process run Claude for this room (see apps/desktop). */
+  startBridge: (input: {
+    roomId: string;
+    sessionToken: string;
+  }) => Promise<{ ok: boolean; reason?: string }>;
+  stopBridge: () => Promise<{ ok: boolean }>;
 }
 
 interface Window {

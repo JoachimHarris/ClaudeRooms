@@ -1,6 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
+import { HostBridge } from "./bridge-client.js";
+
+// main runs as ESM (the Agent SDK is ESM-only), so __dirname must be derived.
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 // ClaudeRooms host application (Milestone 2).
 //
@@ -10,6 +16,7 @@ import path from "node:path";
 // `staticDir` option) lands with Milestone 4; until then a packaged binary
 // exits with a clear message instead of pretending to work.
 const RENDERER_URL = process.env.CLAUDEROOMS_RENDERER_URL ?? "http://localhost:5173";
+const ENGINE_PORT = Number(process.env.CLAUDEROOMS_PORT ?? 3001);
 
 /**
  * The absolute repository path never leaves this process: the renderer and
@@ -32,6 +39,39 @@ function readBranch(repoPath: string): string | null {
     return null; // not a git repository — still fine to host a room
   }
 }
+
+// One bridge at a time: the app hosts a single room per window today.
+let bridge: HostBridge | null = null;
+
+const startBridgeInputSchema = z.object({
+  roomId: z.string().uuid(),
+  // The renderer holds the host session token (it created the room); it is
+  // handed over once so the bridge can prove host role to the engine.
+  sessionToken: z.string().min(20).max(200),
+});
+
+ipcMain.handle("clauderooms:start-bridge", async (_event, raw: unknown) => {
+  const parsed = startBridgeInputSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: "invalid input" };
+
+  bridge?.stop();
+  const engineOrigin = new URL(RENDERER_URL);
+  const bridgeUrl = `ws://${engineOrigin.hostname}:${ENGINE_PORT}/bridge`;
+  bridge = new HostBridge({
+    engineUrl: bridgeUrl,
+    token: parsed.data.sessionToken,
+    getRepoPath: () => currentRepoPath,
+    onStatus: (status) => console.log(`[clauderooms] bridge ${status}`),
+  });
+  bridge.start();
+  return { ok: true };
+});
+
+ipcMain.handle("clauderooms:stop-bridge", async () => {
+  bridge?.stop();
+  bridge = null;
+  return { ok: true };
+});
 
 ipcMain.handle("clauderooms:pick-repo", async () => {
   const result = await dialog.showOpenDialog({
@@ -70,7 +110,7 @@ function createWindow(): void {
     height: 860,
     title: "ClaudeRooms",
     webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: path.join(here, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
