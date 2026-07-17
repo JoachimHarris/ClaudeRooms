@@ -13,7 +13,11 @@ export type ClaudeStatus = "ready" | "thinking" | "responding";
 
 export type TimelineItem =
   | { kind: "message"; message: MessageView }
-  | { kind: "system"; id: string; text: string; at: string };
+  | { kind: "system"; id: string; text: string; at: string }
+  // A collapsible record of a repository step Claude took — currently the
+  // files it was allowed to read. Collapsed by default; the whole room can
+  // expand it to see exactly what was opened.
+  | { kind: "workcard"; id: string; files: string[]; at: string };
 
 export interface RoomState {
   connection: ConnectionStatus | "ended";
@@ -253,6 +257,20 @@ function applyEnvelope(base: RoomState, envelope: ProtocolEnvelope): RoomState {
         ? state.timeline
         : [...state.timeline, { kind: "message", message } as TimelineItem];
       return { ...state, streaming, claudeStatus: "ready", timeline: withMessage };
+    }
+    case "claude.repo_access": {
+      const { files } = envelope.payload as { requestId: string; files: string[] };
+      if (files.length === 0) return state;
+      // A collapsible work card — the visible half of the approval Claude was
+      // granted. Everyone in the room can expand it to see exactly what was
+      // opened, without the file list crowding the conversation by default.
+      return {
+        ...state,
+        timeline: [
+          ...state.timeline,
+          { kind: "workcard", id: envelope.eventId, files, at: envelope.occurredAt },
+        ],
+      };
     }
     case "claude.failed": {
       const { requestId, failureCode, message } = envelope.payload as {

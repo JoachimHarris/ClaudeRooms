@@ -663,6 +663,17 @@ export class RoomService {
     );
   }
 
+  /** Records the repo-relative files Claude was allowed to open (audit). */
+  recordRepoAccess(requestId: string, files: string[]): ProtocolEnvelope {
+    const request = this.getClaudeRequest(requestId);
+    return this.appendEvent(
+      request.roomId,
+      "claude.repo_access",
+      { requestId, files },
+      { type: "claude" },
+    );
+  }
+
   completeClaudeRequest(
     requestId: string,
     responseText: string,

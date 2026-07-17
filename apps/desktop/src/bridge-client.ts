@@ -5,7 +5,11 @@ import {
   type BridgeServerFrame,
   type ClaudeRequestMode,
 } from "@clauderooms/shared";
-import { runDiscussionOnly, type ClaudeRunHandle } from "./claude-runner.js";
+import {
+  runDiscussionOnly,
+  runRepositoryRead,
+  type ClaudeRunHandle,
+} from "./claude-runner.js";
 
 // The host side of the bridge: connects outbound to the engine, proves it is
 // the room's host with the session token, and runs Claude locally for every
@@ -100,32 +104,39 @@ export class HostBridge {
       this.send(frame);
     };
 
-    if (mode !== "discussion_only") {
-      // The host approved repository access, but the runner cannot honour it
-      // yet (Milestone 5 step 2b). Fail loudly: quietly answering without the
-      // repository would look like a real answer and be a lie.
-      finish({
-        type: "bridge.failed",
-        requestId,
-        failureCode: "CLAUDE_UNAVAILABLE",
-        message:
-          "Repository access is approved but not implemented yet — this build can only answer discussion-only requests.",
-      });
+    const events = {
+      onStarted: () => this.send({ type: "bridge.started", requestId }),
+      onDelta: (text: string) => this.send({ type: "bridge.delta", requestId, text }),
+      onCompleted: (text: string) =>
+        finish({ type: "bridge.completed", requestId, text }),
+      onFailed: (failureCode: string, message: string) =>
+        finish({ type: "bridge.failed", requestId, failureCode, message }),
+      onRepoAccess: (files: string[]) =>
+        this.send({ type: "bridge.repo_access", requestId, files }),
+    };
+
+    if (mode === "repository_read") {
+      const repoPath = this.options.getRepoPath();
+      if (!repoPath) {
+        // A room restored after a restart has no repo path (ADR-0008). Say
+        // so instead of answering as if we had looked.
+        finish({
+          type: "bridge.failed",
+          requestId,
+          failureCode: "REPOSITORY_NOT_CONNECTED",
+          message:
+            "No repository is connected in this session — choose the folder again to let Claude read it.",
+        });
+        return;
+      }
+      this.running.set(requestId, runRepositoryRead({ content, repoPath, events }));
       return;
     }
 
-    const handle = runDiscussionOnly({
-      content,
-      cwd: this.options.getRepoPath(),
-      events: {
-        onStarted: () => this.send({ type: "bridge.started", requestId }),
-        onDelta: (text) => this.send({ type: "bridge.delta", requestId, text }),
-        onCompleted: (text) => finish({ type: "bridge.completed", requestId, text }),
-        onFailed: (failureCode, message) =>
-          finish({ type: "bridge.failed", requestId, failureCode, message }),
-      },
-    });
-    this.running.set(requestId, handle);
+    this.running.set(
+      requestId,
+      runDiscussionOnly({ content, cwd: this.options.getRepoPath(), events }),
+    );
   }
 
   private send(frame: BridgeClientFrame): void {
