@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { HostBridge } from "./bridge-client.js";
+import { RoomStore, toSummary, type StoredRoom } from "./room-store.js";
 
 // main runs as ESM (the Agent SDK is ESM-only), so __dirname must be derived.
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -17,6 +18,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // exits with a clear message instead of pretending to work.
 const RENDERER_URL = process.env.CLAUDEROOMS_RENDERER_URL ?? "http://localhost:5173";
 const ENGINE_PORT = Number(process.env.CLAUDEROOMS_PORT ?? 3001);
+
+// Without this, userData is derived from the package name and becomes
+// "~/Library/Application Support/@clauderooms/desktop". Set before any
+// getPath("userData") call — the room store depends on it.
+app.setName("ClaudeRooms");
 
 /**
  * The absolute repository path never leaves this process: the renderer and
@@ -39,6 +45,71 @@ function readBranch(repoPath: string): string | null {
     return null; // not a git repository — still fine to host a room
   }
 }
+
+// The host's durable room list (ADR-0008). Created after `app.whenReady`,
+// because it needs userData paths and the OS keychain.
+let roomStore: RoomStore | null = null;
+
+function requireRoomStore(): RoomStore {
+  if (!roomStore) throw new Error("room store used before app was ready");
+  return roomStore;
+}
+
+const rememberRoomInputSchema = z.object({
+  roomId: z.string().uuid(),
+  roomName: z.string().min(1).max(200),
+  repositoryName: z.string().max(100).nullable(),
+  branchName: z.string().max(200).nullable(),
+  displayName: z.string().min(1).max(80),
+  participantId: z.string().uuid(),
+  sessionToken: z.string().min(20).max(200),
+  inviteToken: z.string().min(20).max(200).nullable(),
+  inviteExpiresAt: z.string().nullable(),
+});
+
+const roomIdInputSchema = z.object({ roomId: z.string().uuid() });
+
+/** Rail data: summaries only — credentials stay in the main process. */
+ipcMain.handle("clauderooms:list-rooms", async () => {
+  const store = requireRoomStore();
+  return { canPersist: store.canPersist, rooms: store.list().map(toSummary) };
+});
+
+ipcMain.handle("clauderooms:remember-room", async (_event, raw: unknown) => {
+  const parsed = rememberRoomInputSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: "invalid input" };
+  const now = new Date().toISOString();
+  const room: StoredRoom = { ...parsed.data, createdAt: now, lastOpenedAt: now };
+  requireRoomStore().save(room);
+  return { ok: true, persisted: requireRoomStore().canPersist };
+});
+
+/**
+ * Hands back the credentials for one room so the renderer can connect. The
+ * renderer already holds these for rooms it just created; this is the same
+ * trust level, not a new exposure — but only ever for the room being opened.
+ */
+ipcMain.handle("clauderooms:open-room", async (_event, raw: unknown) => {
+  const parsed = roomIdInputSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const store = requireRoomStore();
+  const room = store.get(parsed.data.roomId);
+  if (!room) return null;
+  store.touch(room.roomId);
+  return {
+    sessionToken: room.sessionToken,
+    participantId: room.participantId,
+    inviteToken: room.inviteToken,
+    inviteExpiresAt: room.inviteExpiresAt,
+  };
+});
+
+ipcMain.handle("clauderooms:forget-room", async (_event, raw: unknown) => {
+  const parsed = roomIdInputSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false };
+  requireRoomStore().forget(parsed.data.roomId);
+  return { ok: true };
+});
 
 // One bridge at a time: the app hosts a single room per window today.
 let bridge: HostBridge | null = null;
@@ -146,6 +217,16 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  roomStore = new RoomStore();
+  roomStore.load();
+  if (!roomStore.canPersist) {
+    // Honest degradation: rooms still work, they just will not survive a
+    // restart. Never fall back to writing tokens as plaintext.
+    console.warn(
+      "[clauderooms] OS encryption unavailable — rooms will not be remembered",
+    );
+  }
+
   try {
     await waitForRenderer(RENDERER_URL, 120_000);
   } catch (error) {
@@ -154,7 +235,9 @@ app.whenReady().then(async () => {
     return;
   }
   createWindow();
-  console.log("[clauderooms] host window created");
+  console.log(
+    `[clauderooms] host window created (${roomStore.list().length} remembered rooms)`,
+  );
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

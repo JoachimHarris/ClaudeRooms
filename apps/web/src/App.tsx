@@ -1,6 +1,7 @@
 import { matchRoute, navigate, usePath } from "./router.js";
 import { useTheme } from "./theme.js";
 import { ThemeToggle } from "./components/ThemeToggle.js";
+import { RoomRail } from "./components/RoomRail.js";
 import { HomePage } from "./pages/HomePage.js";
 import { JoinPage } from "./pages/JoinPage.js";
 import { RoomPage } from "./pages/RoomPage.js";
@@ -12,13 +13,21 @@ export function App() {
   // page-level chrome mounts.
   const { pref, cycle } = useTheme();
 
+  // The rail is the host's workspace shell: desktop only, and never on the
+  // guest join flow (a guest has exactly one room — the link they opened).
+  const showRail = Boolean(window.clauderooms) && route.page !== "join";
+  const activeRoomId = route.page === "room" ? route.roomId : null;
+
   return (
-    <>
-      <div className="theme-toggle-slot">
-        <ThemeToggle pref={pref} onCycle={cycle} />
+    <div className={showRail ? "app-shell with-rail" : "app-shell"}>
+      {showRail && <RoomRail activeRoomId={activeRoomId} />}
+      <div className="app-main">
+        <div className="theme-toggle-slot">
+          <ThemeToggle pref={pref} onCycle={cycle} />
+        </div>
+        {renderRoute()}
       </div>
-      {renderRoute()}
-    </>
+    </div>
   );
 
   function renderRoute() {

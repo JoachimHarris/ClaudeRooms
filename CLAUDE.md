@@ -10,10 +10,11 @@ README and UI.
 
 ## Current stage
 
-Milestone 3 complete: real Claude runs on the host via the Agent SDK inside
-the desktop app, delegated over the `/bridge` endpoint; dark/light theming.
+Milestone 4 complete: real Claude runs on the host via the Agent SDK inside
+the desktop app (delegated over `/bridge`), dark/light theming, and a
+persistent left rail of rooms backed by an encrypted room store (ADR-0008).
 Hosts use the Electron app (`apps/desktop`); browsers are guest-join only.
-Next: Milestone 4 (persistent left rail of rooms). Roadmap:
+Next: Milestone 5 (repository-aware Claude). Roadmap:
 `docs/product/build-plan.md`.
 Product truth lives in `docs/product/`, architecture in `docs/architecture/`,
 security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
@@ -32,8 +33,10 @@ security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
   runs the real Claude (Agent SDK) — **its four discussion-only gates are
   load-bearing and were each proven necessary; do not remove one without
   re-running the CLAUDE.md leak test**. `src/bridge-client.ts` connects
-  outbound to the engine. Security posture (contextIsolation, sandbox,
-  navigation lock) must never be weakened.
+  outbound to the engine. `src/room-store.ts` holds host credentials
+  encrypted via `safeStorage` — **never add a plaintext fallback** (ADR-0008).
+  Security posture (contextIsolation, sandbox, navigation lock) must never be
+  weakened.
 
 ## Commands
 

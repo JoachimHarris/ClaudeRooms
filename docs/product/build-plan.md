@@ -49,13 +49,23 @@ prompt (both found by testing in the app, see the threat model).
 ordinary chat never reaches the bridge; credentials and repo path stay on
 the host; CI makes no paid calls. All met.
 
-## Milestone 4 — Workspace shell: rooms in a persistent left rail
+## Milestone 4 — Workspace shell: rooms in a persistent left rail ✅ (this repo state)
 
-Rooms stop being one-shot: a Slack-like left rail lists your rooms, they
-survive app restarts, and you switch between them in one click. Needs host
-identity to persist on disk (today it dies with the tab) — a
-security-relevant change, so it gets its own ADR and threat-model rows. No
-accounts required: the app itself remembers {roomId, token}.
+Rooms stopped being one-shot. A left rail lists your rooms, they survive app
+restarts, and you switch between them in one click; `×` forgets a room and
+its credentials. No accounts: the app itself remembers `{roomId, token}` in
+an encrypted store (ADR-0008) — `safeStorage`, mode 0600, and **no plaintext
+fallback**: without OS encryption, rooms simply are not remembered and the
+rail says so.
+
+Reopening a remembered room re-attaches the Claude bridge; the repository
+path is still never persisted, so Claude works discussion-only until the
+host re-picks the folder.
+
+**Accepted when:** a room created in the app is still in the rail after a
+full restart, opens with its history, and its bridge reconnects; the store
+on disk contains no readable tokens; guests are unaffected. All verified in
+the app.
 
 ## Milestone 5 — Repository-aware Claude
 

@@ -7,10 +7,44 @@ interface DesktopRepoInfo {
   branchName: string | null;
 }
 
+/** A remembered room as the rail sees it: never any credentials. */
+interface DesktopRoomSummary {
+  roomId: string;
+  roomName: string;
+  repositoryName: string | null;
+  branchName: string | null;
+  displayName: string;
+  participantId: string;
+  createdAt: string;
+  lastOpenedAt: string;
+}
+
+interface DesktopRoomCredentials {
+  sessionToken: string;
+  participantId: string;
+  inviteToken: string | null;
+  inviteExpiresAt: string | null;
+}
+
 interface ClaudeRoomsDesktopBridge {
   appVersion: string;
   /** Opens a native folder picker; resolves null if the user cancels. */
   pickRepo: () => Promise<DesktopRepoInfo | null>;
+  /** `canPersist` is false when the OS cannot encrypt at rest (ADR-0008). */
+  listRooms: () => Promise<{ canPersist: boolean; rooms: DesktopRoomSummary[] }>;
+  rememberRoom: (input: {
+    roomId: string;
+    roomName: string;
+    repositoryName: string | null;
+    branchName: string | null;
+    displayName: string;
+    participantId: string;
+    sessionToken: string;
+    inviteToken: string | null;
+    inviteExpiresAt: string | null;
+  }) => Promise<{ ok: boolean; persisted?: boolean; reason?: string }>;
+  openRoom: (input: { roomId: string }) => Promise<DesktopRoomCredentials | null>;
+  forgetRoom: (input: { roomId: string }) => Promise<{ ok: boolean }>;
   /** Lets the main process run Claude for this room (see apps/desktop). */
   startBridge: (input: {
     roomId: string;

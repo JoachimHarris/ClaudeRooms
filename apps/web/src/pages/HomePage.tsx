@@ -52,6 +52,20 @@ function HostHome() {
         inviteToken: result.inviteToken,
         inviteExpiresAt: result.inviteExpiresAt,
       });
+      // Remember the room so it survives an app restart (ADR-0008). Not
+      // fatal if the OS cannot encrypt at rest — the room simply stays
+      // session-scoped, which is the pre-Milestone-4 behaviour.
+      await window.clauderooms?.rememberRoom({
+        roomId: result.room.id,
+        roomName: result.room.name,
+        repositoryName: repo?.repositoryName ?? null,
+        branchName: repo?.branchName ?? null,
+        displayName: displayName.trim(),
+        participantId: result.participant.id,
+        sessionToken: result.sessionToken,
+        inviteToken: result.inviteToken,
+        inviteExpiresAt: result.inviteExpiresAt,
+      });
       // Hand the token to the main process so it can run Claude locally for
       // this room. Failure here is not fatal: the room still works, Claude
       // just falls back to the built-in fake adapter.

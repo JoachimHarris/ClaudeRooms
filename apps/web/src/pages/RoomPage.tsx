@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type { MessageView } from "@clauderooms/shared";
-import { loadSession } from "../session.js";
+import { resolveSession, type StoredSession } from "../session.js";
 import { RoomConnection } from "../ws-client.js";
 import { initialRoomState, roomReducer } from "../roomState.js";
 import { navigate } from "../router.js";
@@ -25,7 +25,11 @@ function connectionLabel(connection: string): string {
 }
 
 export function RoomPage({ roomId }: { roomId: string }) {
-  const session = useMemo(() => loadSession(roomId), [roomId]);
+  // Credentials may live in this tab (just created / guest) or, in the
+  // desktop app, in the encrypted room store (ADR-0008) — so resolving them
+  // is async, and "not found yet" is distinct from "no access".
+  const [session, setSession] = useState<StoredSession | null>(null);
+  const [resolving, setResolving] = useState(true);
   const [state, dispatch] = useReducer(roomReducer, initialRoomState);
   const [prefill, setPrefill] = useState<DecisionPrefill | null>(null);
   const [copied, setCopied] = useState(false);
@@ -33,6 +37,30 @@ export function RoomPage({ roomId }: { roomId: string }) {
   const connectionRef = useRef<RoomConnection | null>(null);
   const sequenceRef = useRef(0);
   sequenceRef.current = state.lastSequence;
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolving(true);
+    void resolveSession(roomId).then(async (resolved) => {
+      if (cancelled) return;
+      // Reopening a remembered room: the bridge died with the last app run,
+      // so re-attach it, otherwise Claude silently degrades to the fake
+      // adapter. The repo path is gone until re-picked (ADR-0008), which the
+      // runner reports honestly rather than guessing.
+      if (resolved && window.clauderooms) {
+        await window.clauderooms.startBridge({
+          roomId,
+          sessionToken: resolved.sessionToken,
+        });
+      }
+      if (cancelled) return;
+      setSession(resolved);
+      setResolving(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
 
   useEffect(() => {
     if (!session) return;
@@ -46,6 +74,14 @@ export function RoomPage({ roomId }: { roomId: string }) {
     connection.start();
     return () => connection.stop();
   }, [roomId, session]);
+
+  if (resolving) {
+    return (
+      <main className="centered-page">
+        <p className="muted">Opening room…</p>
+      </main>
+    );
+  }
 
   if (!session) {
     return (
