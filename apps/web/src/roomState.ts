@@ -254,6 +254,19 @@ function applyEnvelope(base: RoomState, envelope: ProtocolEnvelope): RoomState {
         : [...state.timeline, { kind: "message", message } as TimelineItem];
       return { ...state, streaming, claudeStatus: "ready", timeline: withMessage };
     }
+    case "claude.repo_access": {
+      const { files } = envelope.payload as { requestId: string; files: string[] };
+      if (files.length === 0) return state;
+      // Everyone in the room sees exactly which files Claude was allowed to
+      // open — the visible half of the approval it was granted.
+      const list = files.length <= 6 ? files.join(", ") : `${files.length} files`;
+      return pushSystem(
+        state,
+        envelope.eventId,
+        `Claude read from the repository: ${list}`,
+        envelope.occurredAt,
+      );
+    }
     case "claude.failed": {
       const { requestId, failureCode, message } = envelope.payload as {
         requestId: string;

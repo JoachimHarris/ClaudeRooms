@@ -93,11 +93,29 @@ ignoring the gate fails exactly those four that guard it. An approved
 request currently fails honestly ("approved but not implemented yet")
 rather than quietly answering without the repository.
 
-**Step 2b — the runner reads.** Lift the M3 gates per approved request
-(read-only tools, `settingSources: []` stays), `canUseTool` consulting
-`RepoAccessPolicy` per call, report which files were read, and the
-collapsible work cards. Requires the repo path — a room restored after a
-restart must ask the host to re-pick the folder.
+**Step 2b ✅ — the runner reads.** An approved `repository_read` now lifts the
+M3 gates _for that one request_: read-only tools (`Read`, `Glob`; `Grep`
+deliberately excluded — it returns file contents, so it needs result-level
+redaction, a later step), `settingSources: []` and `allowedTools: []` stay,
+and `canUseTool` runs every call through `RepoAccessPolicy` before it happens.
+The dispatch gate lives in `apps/desktop/src/tool-gate.ts` — SDK-free, so it
+is unit-tested on its own (22 tests, mutation-checked; it fails closed, so an
+unrecognised tool is denied). Files opened are recorded repo-relative and
+broadcast as a durable `claude.repo_access` audit event the whole room sees. A
+room restored without a repo path (ADR-0008) fails with
+`REPOSITORY_NOT_CONNECTED` rather than answering as if it had looked.
+
+_Found in testing:_ with cwd = repo root, Claude's own answer text echoed the
+host's **absolute** path (`…/ClaudeRooms/package.json`) into the room —
+breaking the ADR-0007 promise that the absolute path never leaves the Electron
+main process. Fixed with `redactRepoRoots`: the runner strips both the
+realpath'd root and the picked path out of every delta and the final answer
+inside the host process before any text reaches the engine (hard guard on the
+durable answer, unit + mutation tested), with the system prompt asking for
+repo-relative paths as defence in depth.
+
+_Still to come in M5:_ the collapsible work cards for Claude's steps in the
+hybrid timeline (the audit line is the first, minimal version of this).
 
 ## Milestone 6 — Packaged app + remote guests
 

@@ -116,6 +116,12 @@ export const eventPayloadSchemas = {
     failureCode: z.string(),
     message: z.string(),
   }),
+  // Audit: the repo-relative paths Claude was actually allowed to open for a
+  // request. Absolute paths never appear — the app only ever sends relatives.
+  "claude.repo_access": z.object({
+    requestId: z.string().uuid(),
+    files: z.array(z.string().max(1024)).max(200),
+  }),
   "decision.proposed": z.object({ decision: decisionViewSchema }),
   "decision.accepted": z.object({ decision: decisionViewSchema }),
   "decision.rejected": z.object({ decision: decisionViewSchema }),
@@ -283,6 +289,12 @@ export const bridgeClientFrameSchema = z.discriminatedUnion("type", [
     requestId: requestIdSchema,
     failureCode: z.string().max(80),
     message: z.string().max(500),
+  }),
+  // The repo-relative paths Claude was allowed to open for this request.
+  z.object({
+    type: z.literal("bridge.repo_access"),
+    requestId: requestIdSchema,
+    files: z.array(z.string().max(1024)).max(200),
   }),
   z.object({ type: z.literal("bridge.ping") }),
 ]);

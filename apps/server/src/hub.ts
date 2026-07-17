@@ -194,6 +194,14 @@ export class RoomHub {
             );
             terminal = true;
             break;
+          case "repo_access":
+            // Durable audit event: persisted so a reconnecting client and the
+            // room history both show what Claude was allowed to read.
+            this.broadcast(
+              input.roomId,
+              this.rooms.recordRepoAccess(input.requestId, event.files),
+            );
+            break;
         }
       }
       if (!terminal) {

@@ -98,6 +98,15 @@ export function registerBridgeWs(
               false,
             );
             return;
+          case "bridge.repo_access":
+            // Not terminal: the answer still follows. This is the audit of
+            // what Claude was allowed to open.
+            bridge.handleEvent(
+              frame.requestId,
+              { type: "repo_access", files: frame.files },
+              false,
+            );
+            return;
           case "bridge.completed":
             bridge.handleEvent(
               frame.requestId,
