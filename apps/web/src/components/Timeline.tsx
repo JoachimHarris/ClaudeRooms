@@ -41,6 +41,28 @@ export function Timeline({
             </p>
           );
         }
+        if (item.kind === "workcard") {
+          const count = item.files.length;
+          return (
+            <details key={item.id} className="work-card">
+              <summary className="work-card-summary">
+                <span className="chip claude-chip">repo read</span>
+                <span className="work-card-title">
+                  Claude read {count} {count === 1 ? "file" : "files"} from the repository
+                </span>
+                <time className="msg-time" dateTime={item.at}>
+                  {timeOf(item.at)}
+                </time>
+              </summary>
+              {/* Repo-relative paths, rendered as text nodes only. */}
+              <ul className="work-card-files">
+                {item.files.map((file) => (
+                  <li key={file}>{file}</li>
+                ))}
+              </ul>
+            </details>
+          );
+        }
         const { message } = item;
         const isClaudeRequest = message.messageType === "claude_request";
         const isClaudeResponse = message.messageType === "claude_response";

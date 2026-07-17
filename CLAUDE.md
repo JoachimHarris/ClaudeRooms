@@ -14,8 +14,9 @@ Milestone 5 in progress: repository-aware Claude. Real Claude runs on the host
 via the Agent SDK inside the desktop app (delegated over `/bridge`), with
 dark/light theming and a persistent left rail of rooms backed by an encrypted
 room store (ADR-0008). A host-approved `repository_read` request now lets
-Claude actually read the repo under `RepoAccessPolicy` (step 2b done); the
-collapsible work cards remain. Hosts use the Electron app (`apps/desktop`);
+Claude actually read the repo under `RepoAccessPolicy` (step 2b done), and the
+files read render as a collapsible work card in the timeline (step 2c). Hosts
+use the Electron app (`apps/desktop`);
 browsers are guest-join only. Roadmap: `docs/product/build-plan.md`.
 Product truth lives in `docs/product/`, architecture in `docs/architecture/`,
 security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.

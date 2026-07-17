@@ -114,8 +114,20 @@ inside the host process before any text reaches the engine (hard guard on the
 durable answer, unit + mutation tested), with the system prompt asking for
 repo-relative paths as defence in depth.
 
-_Still to come in M5:_ the collapsible work cards for Claude's steps in the
-hybrid timeline (the audit line is the first, minimal version of this).
+**Step 2c ✅ — the work card.** The repo-access audit is no longer a flat
+system line: `claude.repo_access` renders as a collapsible work card in the
+timeline (`<details>`/`<summary>`, collapsed by default), summarising "Claude
+read N files from the repository" and expanding to the repo-relative list.
+Native disclosure, keyboard-accessible, paths rendered as text nodes only (no
+raw HTML — hard rule 5). This is the first, minimal version of the hybrid
+timeline's work cards; richer steps (per-tool timing, longer reads) can hang
+off the same card shape later.
+
+With that, Milestone 5's vertical slice is complete: a collaborator can ask
+Claude to read the repository, the host approves once, Claude reads only what
+`RepoAccessPolicy` allows, and the whole room sees both the answer and a
+collapsible record of exactly which files were opened — with no absolute host
+path ever leaving the desktop process.
 
 ## Milestone 6 — Packaged app + remote guests
 
