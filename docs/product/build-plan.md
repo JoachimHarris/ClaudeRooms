@@ -28,7 +28,7 @@ repo metadata without touching a browser or terminal command; the guest
 flow still works in a plain browser; the server never sees an absolute
 path; all checks green.
 
-## Milestone 3 — Real Claude in the app ✅ (this repo state)
+## Milestone 3 — Real Claude in the app ✅
 
 Claude runs for real, on the host machine, via the Claude Agent SDK inside
 the desktop app's main process — the only place that holds the repository
@@ -49,7 +49,7 @@ prompt (both found by testing in the app, see the threat model).
 ordinary chat never reaches the bridge; credentials and repo path stay on
 the host; CI makes no paid calls. All met.
 
-## Milestone 4 — Workspace shell: rooms in a persistent left rail ✅ (this repo state)
+## Milestone 4 — Workspace shell: rooms in a persistent left rail ✅
 
 Rooms stopped being one-shot. A left rail lists your rooms, they survive app
 restarts, and you switch between them in one click; `×` forgets a room and
@@ -67,12 +67,24 @@ full restart, opens with its history, and its bridge reconnects; the store
 on disk contains no readable tokens; guests are unaffected. All verified in
 the app.
 
-## Milestone 5 — Repository-aware Claude
+## Milestone 5 — Repository-aware Claude (in progress)
 
 `repository_read` mode: host-approved, scoped file access (the gates in
 Milestone 3 are lifted per request, never globally), shared summaries of what
 Claude looked at, redaction of `.env*`/keys/hidden files, audit events, and
 the hybrid timeline's collapsible work cards for Claude's steps.
+
+**Step 1 ✅ — the access policy.** `apps/desktop/src/repo-access.ts` decides
+what may be read: real-path resolution before containment (so symlinked files
+_and_ directories cannot escape), a credential deny-list checked on both the
+requested and the resolved name, and a size cap. It reads nothing itself, so
+it is fully unit-testable — 18 tests, and the symlink protection is
+mutation-checked (removing `realpathSync` fails exactly the four escape
+tests). This also gives `apps/desktop` its first test suite.
+
+**Step 2 — wiring.** `repository_read` in the protocol, host approval before
+a request runs, `canUseTool` consulting the policy per tool call, audit
+events, and the work cards.
 
 ## Milestone 6 — Packaged app + remote guests
 

@@ -9,14 +9,15 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit",
     "build": "node build.mjs && tsc --noEmit",
-    "test": "echo \"no desktop tests yet (see docs/product/build-plan.md M4)\""
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^20.17.10",
     "@types/ws": "^8.5.13",
     "electron": "^33.3.1",
     "esbuild": "^0.24.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.4"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.210",
