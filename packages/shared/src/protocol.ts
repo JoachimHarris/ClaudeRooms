@@ -38,17 +38,29 @@ export const messageViewSchema = z.object({
   createdAt: z.string(),
 });
 
+export const claudeRequestModeSchema = z.enum(["discussion_only", "repository_read"]);
+
 export const claudeRequestViewSchema = z.object({
   id: z.string().uuid(),
   roomId: z.string().uuid(),
   createdByParticipantId: z.string().uuid(),
   content: z.string(),
-  mode: z.literal("discussion_only"),
-  status: z.enum(["pending", "running", "completed", "failed", "cancelled"]),
+  mode: claudeRequestModeSchema,
+  status: z.enum([
+    "awaiting_approval",
+    "rejected",
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+  ]),
   requestedAt: z.string(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   failureCode: z.string().nullable(),
+  approvedByParticipantId: z.string().uuid().nullable(),
+  approvedAt: z.string().nullable(),
 });
 
 export const decisionViewSchema = z.object({
@@ -83,6 +95,16 @@ export const eventPayloadSchemas = {
   }),
   "message.created": z.object({ message: messageViewSchema }),
   "claude.requested": z.object({ request: claudeRequestViewSchema }),
+  // Parked: the request exists but must not run until the host decides.
+  "claude.approval_required": z.object({ request: claudeRequestViewSchema }),
+  "claude.approved": z.object({
+    request: claudeRequestViewSchema,
+    approvedByParticipantId: z.string().uuid(),
+  }),
+  "claude.rejected": z.object({
+    request: claudeRequestViewSchema,
+    rejectedByParticipantId: z.string().uuid(),
+  }),
   "claude.started": z.object({ requestId: z.string().uuid() }),
   "claude.delta": z.object({ requestId: z.string().uuid(), text: z.string() }),
   "claude.completed": z.object({
@@ -170,7 +192,17 @@ export const clientFrameSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("claude.request"),
     content: contentSchema,
-    mode: z.literal("discussion_only"),
+    mode: claudeRequestModeSchema,
+  }),
+  // Host-only; the server derives the role from the session token, so these
+  // are safe to expose to every client.
+  z.object({
+    type: z.literal("claude.approve"),
+    requestId: z.string().uuid(),
+  }),
+  z.object({
+    type: z.literal("claude.reject"),
+    requestId: z.string().uuid(),
   }),
   z.object({
     type: z.literal("decision.propose"),
@@ -268,7 +300,9 @@ export const bridgeServerFrameSchema = z.discriminatedUnion("type", [
     type: z.literal("bridge.request"),
     requestId: requestIdSchema,
     content: z.string().max(LIMITS.maxMessageLength),
-    mode: z.literal("discussion_only"),
+    // The engine only ever forwards a mode the host already approved
+    // (approval is enforced in the domain layer, not here).
+    mode: claudeRequestModeSchema,
   }),
   z.object({ type: z.literal("bridge.cancel"), requestId: requestIdSchema }),
   z.object({ type: z.literal("bridge.pong") }),

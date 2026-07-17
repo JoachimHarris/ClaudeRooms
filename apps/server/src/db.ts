@@ -6,6 +6,7 @@ import path from "node:path";
 // Append new migrations to the array — never edit an applied one.
 
 const MIGRATIONS: string[] = [
+  // 1 — initial schema
   `
   CREATE TABLE rooms (
     id TEXT PRIMARY KEY,
@@ -92,6 +93,11 @@ const MIGRATIONS: string[] = [
     occurred_at TEXT NOT NULL,
     PRIMARY KEY (room_id, sequence)
   );
+  `,
+  // 2 — approval audit trail for modes that need host consent (M5)
+  `
+  ALTER TABLE claude_requests ADD COLUMN approved_by TEXT;
+  ALTER TABLE claude_requests ADD COLUMN approved_at TEXT;
   `,
 ];
 

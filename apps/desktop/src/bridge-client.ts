@@ -3,6 +3,7 @@ import {
   bridgeServerFrameSchema,
   type BridgeClientFrame,
   type BridgeServerFrame,
+  type ClaudeRequestMode,
 } from "@clauderooms/shared";
 import { runDiscussionOnly, type ClaudeRunHandle } from "./claude-runner.js";
 
@@ -88,16 +89,31 @@ export class HostBridge {
       case "bridge.pong":
         return;
       case "bridge.request":
-        this.runRequest(frame.requestId, frame.content);
+        this.runRequest(frame.requestId, frame.content, frame.mode);
         return;
     }
   }
 
-  private runRequest(requestId: string, content: string): void {
+  private runRequest(requestId: string, content: string, mode: ClaudeRequestMode): void {
     const finish = (frame: BridgeClientFrame) => {
       this.running.delete(requestId);
       this.send(frame);
     };
+
+    if (mode !== "discussion_only") {
+      // The host approved repository access, but the runner cannot honour it
+      // yet (Milestone 5 step 2b). Fail loudly: quietly answering without the
+      // repository would look like a real answer and be a lie.
+      finish({
+        type: "bridge.failed",
+        requestId,
+        failureCode: "CLAUDE_UNAVAILABLE",
+        message:
+          "Repository access is approved but not implemented yet — this build can only answer discussion-only requests.",
+      });
+      return;
+    }
+
     const handle = runDiscussionOnly({
       content,
       cwd: this.options.getRepoPath(),

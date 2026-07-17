@@ -9,7 +9,7 @@ import type {
   RoomEventType,
   RoomView,
 } from "@clauderooms/shared";
-import { EPHEMERAL_EVENT_TYPES, LIMITS } from "@clauderooms/shared";
+import { EPHEMERAL_EVENT_TYPES, LIMITS, requiresApproval } from "@clauderooms/shared";
 import type { AppDatabase } from "./db.js";
 import { DomainError } from "./errors.js";
 import { generateToken, hashToken } from "./tokens.js";
@@ -68,6 +68,8 @@ interface ClaudeRequestRow {
   started_at: string | null;
   completed_at: string | null;
   failure_code: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
 }
 
 interface DecisionRow {
@@ -156,6 +158,8 @@ export class RoomService {
       startedAt: row.started_at,
       completedAt: row.completed_at,
       failureCode: row.failure_code,
+      approvedByParticipantId: row.approved_by,
+      approvedAt: row.approved_at,
     };
   }
 
@@ -499,17 +503,33 @@ export class RoomService {
     request: ClaudeRequestView;
     message: MessageView;
     envelopes: ProtocolEnvelope[];
+    /** False when the request is parked awaiting host approval. */
+    runnable: boolean;
   } {
     this.requireOpenRoom(participant.roomId);
     const requestId = randomUUID();
     const requestedAt = now();
+    // Modes that can reach the host's machine start parked. `runnable` is
+    // what the transport keys off — it must never infer this from the mode
+    // itself, so the decision lives here with the domain rules.
+    const status: ClaudeRequestView["status"] = requiresApproval(mode)
+      ? "awaiting_approval"
+      : "pending";
     this.db
       .prepare(
         `INSERT INTO claude_requests
            (id, room_id, created_by, content, mode, status, requested_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(requestId, participant.roomId, participant.id, content, mode, requestedAt);
+      .run(
+        requestId,
+        participant.roomId,
+        participant.id,
+        content,
+        mode,
+        status,
+        requestedAt,
+      );
 
     const message = this.insertMessage({
       roomId: participant.roomId,
@@ -520,7 +540,7 @@ export class RoomService {
       requestId,
     });
     const request = this.getClaudeRequest(requestId);
-    const envelopes = [
+    const envelopes: ProtocolEnvelope[] = [
       this.appendEvent(
         participant.roomId,
         "message.created",
@@ -534,7 +554,90 @@ export class RoomService {
         { type: "human", id: participant.id },
       ),
     ];
-    return { request, message, envelopes };
+    if (request.status === "awaiting_approval") {
+      envelopes.push(
+        this.appendEvent(
+          participant.roomId,
+          "claude.approval_required",
+          { request },
+          { type: "system" },
+        ),
+      );
+    }
+    // `runnable: false` means the caller must not hand this to an adapter.
+    return { request, message, envelopes, runnable: request.status === "pending" };
+  }
+
+  /**
+   * Host-only. Approves exactly one parked request and returns it ready to
+   * run. Re-approving is an invalid transition, so an approval can never be
+   * replayed onto a second request or a finished one.
+   */
+  approveClaudeRequest(
+    participant: Omit<ParticipantView, "connected">,
+    requestId: string,
+  ): { request: ClaudeRequestView; envelope: ProtocolEnvelope } {
+    // Throws unless this is the host and the request is still parked.
+    this.requireApprovableRequest(participant, requestId);
+    const approvedAt = now();
+    this.db
+      .prepare(
+        "UPDATE claude_requests SET status = 'pending', approved_by = ?, approved_at = ? WHERE id = ?",
+      )
+      .run(participant.id, approvedAt, requestId);
+    const approved = this.getClaudeRequest(requestId);
+    const envelope = this.appendEvent(
+      participant.roomId,
+      "claude.approved",
+      { request: approved, approvedByParticipantId: participant.id },
+      { type: "human", id: participant.id },
+    );
+    return { request: approved, envelope };
+  }
+
+  /** Host-only. A rejected request is terminal and never runs. */
+  rejectClaudeRequest(
+    participant: Omit<ParticipantView, "connected">,
+    requestId: string,
+  ): { request: ClaudeRequestView; envelope: ProtocolEnvelope } {
+    this.requireApprovableRequest(participant, requestId);
+    this.db
+      .prepare(
+        "UPDATE claude_requests SET status = 'rejected', completed_at = ? WHERE id = ?",
+      )
+      .run(now(), requestId);
+    const rejected = this.getClaudeRequest(requestId);
+    const envelope = this.appendEvent(
+      participant.roomId,
+      "claude.rejected",
+      { request: rejected, rejectedByParticipantId: participant.id },
+      { type: "human", id: participant.id },
+    );
+    return { request: rejected, envelope };
+  }
+
+  private requireApprovableRequest(
+    participant: Omit<ParticipantView, "connected">,
+    requestId: string,
+  ): ClaudeRequestView {
+    this.requireOpenRoom(participant.roomId);
+    if (participant.role !== "host") {
+      throw new DomainError(
+        "NOT_AUTHORIZED",
+        "Only the host can approve what Claude may do",
+      );
+    }
+    const request = this.getClaudeRequest(requestId);
+    if (request.roomId !== participant.roomId) {
+      throw new DomainError("NOT_AUTHORIZED", "Request belongs to another room");
+    }
+    if (request.status !== "awaiting_approval") {
+      throw new DomainError(
+        "INVALID_TRANSITION",
+        `Request is not awaiting approval (status '${request.status}')`,
+      );
+    }
+    return request;
   }
 
   getClaudeRequest(requestId: string): ClaudeRequestView {

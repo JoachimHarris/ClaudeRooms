@@ -692,3 +692,43 @@ label > textarea {
     display: none;
   }
 }
+
+/* Approvals: deliberately loud, and never inside the chat log (M5) */
+.approvals {
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-3) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.approval {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  padding: var(--space-3);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.approval-body {
+  min-width: 0;
+}
+.approval-title {
+  margin: 0 0 var(--space-1);
+}
+.approval-quote {
+  margin: 0 0 var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.approval-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  flex-shrink: 0;
+}

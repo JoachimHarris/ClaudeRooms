@@ -82,9 +82,22 @@ it is fully unit-testable — 18 tests, and the symlink protection is
 mutation-checked (removing `realpathSync` fails exactly the four escape
 tests). This also gives `apps/desktop` its first test suite.
 
-**Step 2 — wiring.** `repository_read` in the protocol, host approval before
-a request runs, `canUseTool` consulting the policy per tool call, audit
-events, and the work cards.
+**Step 2a ✅ — the approval flow.** `repository_read` exists end to end, but
+only ever _asks_: the engine parks it as `awaiting_approval` and the
+transport runs a request only when the domain layer says `runnable`, never
+by inspecting the mode itself. Host-only approve/reject, bound to one
+request (re-approving is `INVALID_TRANSITION`), `approved_by`/`approved_at`
+audited. The approval strip sits above the composer — never in the chat log
+— and quotes the request verbatim. Five security tests, mutation-checked:
+ignoring the gate fails exactly those four that guard it. An approved
+request currently fails honestly ("approved but not implemented yet")
+rather than quietly answering without the repository.
+
+**Step 2b — the runner reads.** Lift the M3 gates per approved request
+(read-only tools, `settingSources: []` stays), `canUseTool` consulting
+`RepoAccessPolicy` per call, report which files were read, and the
+collapsible work cards. Requires the repo path — a room restored after a
+restart must ask the host to re-pick the folder.
 
 ## Milestone 6 — Packaged app + remote guests
 

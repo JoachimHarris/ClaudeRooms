@@ -22,9 +22,28 @@ export type Role = "host" | "collaborator";
 export type AuthorType = "human" | "claude" | "system";
 export type MessageType =
   "human" | "claude_request" | "claude_response" | "system" | "error";
-export type ClaudeRequestMode = "discussion_only";
+/**
+ * What a Claude request is allowed to touch. Anything beyond
+ * `discussion_only` requires explicit host approval before it runs, and the
+ * approval is bound to that one request — never granted as a standing right.
+ */
+export type ClaudeRequestMode = "discussion_only" | "repository_read";
+
+/** Modes the host must approve before the request may run at all. */
+export const MODES_REQUIRING_APPROVAL: readonly ClaudeRequestMode[] = ["repository_read"];
+
+export function requiresApproval(mode: ClaudeRequestMode): boolean {
+  return MODES_REQUIRING_APPROVAL.includes(mode);
+}
+
 export type ClaudeRequestStatus =
-  "pending" | "running" | "completed" | "failed" | "cancelled";
+  | "awaiting_approval"
+  | "rejected"
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
 export type DecisionStatus = "proposed" | "accepted" | "rejected";
 
 export interface RoomView {
@@ -68,6 +87,9 @@ export interface ClaudeRequestView {
   startedAt: string | null;
   completedAt: string | null;
   failureCode: string | null;
+  /** Audit trail: who let this run, and when. Null until approved. */
+  approvedByParticipantId: string | null;
+  approvedAt: string | null;
 }
 
 export interface DecisionView {

@@ -5,6 +5,7 @@ import { startTestServer, post, TestClient, type TestServer } from "./helpers.js
 // Automated checks for the security boundaries in docs/security/threat-model.md.
 
 type ErrorFrame = Extract<ServerFrame, { type: "error" }>;
+type EventFrame = Extract<ServerFrame, { type: "event" }>;
 
 async function createRoom(server: TestServer) {
   const raw = await post(server.baseUrl, "/api/rooms", {
@@ -248,6 +249,152 @@ describe("security boundaries", () => {
     const room = createRoomResponseSchema.parse(valid.json).room;
     expect(room.repositoryName).toBe("clauderooms");
     expect(room.branchName).toBe("feature/desktop-app");
+  });
+
+  it("never runs a repository request before the host approves it", async () => {
+    const created = await createRoom(server);
+    const joined = await joinAsCollaborator(server, created.room.id, created.inviteToken);
+
+    const host = await TestClient.connect(server.wsUrl);
+    host.auth(created.sessionToken);
+    await host.waitFor((f) => f.type === "auth.ok");
+
+    const collab = await TestClient.connect(server.wsUrl);
+    collab.auth(joined.sessionToken);
+    await collab.waitFor((f) => f.type === "auth.ok");
+
+    collab.send({
+      type: "claude.request",
+      content: "Read the auth module and summarise it",
+      mode: "repository_read",
+    });
+
+    // The room is told the host must decide…
+    const parked = (await host.waitForEvent("claude.approval_required")) as EventFrame;
+    const request = (parked.event.payload as { request: { id: string; status: string } })
+      .request;
+    expect(request.status).toBe("awaiting_approval");
+
+    // …and nothing runs. The fake adapter answers in milliseconds, so if the
+    // request had been dispatched, claude.started would already be here.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const startedEarly = host.frames.some(
+      (f) => f.type === "event" && f.event.type === "claude.started",
+    );
+    expect(startedEarly).toBe(false);
+    expect(server.rooms.getClaudeRequest(request.id).status).toBe("awaiting_approval");
+
+    // Only after the host approves does it run.
+    host.send({ type: "claude.approve", requestId: request.id });
+    await host.waitForEvent("claude.approved");
+    await host.waitForEvent("claude.started");
+
+    const stored = server.rooms.getClaudeRequest(request.id);
+    expect(stored.approvedByParticipantId).toBe(created.participant.id);
+    expect(stored.approvedAt).not.toBeNull();
+
+    host.close();
+    collab.close();
+  });
+
+  it("prevents a collaborator from approving a repository request", async () => {
+    const created = await createRoom(server);
+    const joined = await joinAsCollaborator(server, created.room.id, created.inviteToken);
+
+    const collab = await TestClient.connect(server.wsUrl);
+    collab.auth(joined.sessionToken);
+    await collab.waitFor((f) => f.type === "auth.ok");
+
+    collab.send({
+      type: "claude.request",
+      content: "Read the repo",
+      mode: "repository_read",
+    });
+    const parked = (await collab.waitForEvent("claude.approval_required")) as EventFrame;
+    const requestId = (parked.event.payload as { request: { id: string } }).request.id;
+
+    // The collaborator tries to approve their own request.
+    collab.send({ type: "claude.approve", requestId });
+    const error = (await collab.waitFor((f) => f.type === "error")) as ErrorFrame;
+    expect(error.code).toBe("NOT_AUTHORIZED");
+
+    // Still parked, still never dispatched.
+    expect(server.rooms.getClaudeRequest(requestId).status).toBe("awaiting_approval");
+    collab.close();
+  });
+
+  it("binds an approval to one request: it cannot be replayed", async () => {
+    const created = await createRoom(server);
+    const host = await TestClient.connect(server.wsUrl);
+    host.auth(created.sessionToken);
+    await host.waitFor((f) => f.type === "auth.ok");
+
+    host.send({
+      type: "claude.request",
+      content: "Read the repo",
+      mode: "repository_read",
+    });
+    const parked = (await host.waitForEvent("claude.approval_required")) as EventFrame;
+    const requestId = (parked.event.payload as { request: { id: string } }).request.id;
+
+    host.send({ type: "claude.approve", requestId });
+    await host.waitForEvent("claude.approved");
+
+    // Approving again must not re-run it.
+    host.send({ type: "claude.approve", requestId });
+    const error = (await host.waitFor((f) => f.type === "error")) as ErrorFrame;
+    expect(error.code).toBe("INVALID_TRANSITION");
+    host.close();
+  });
+
+  it("never runs a rejected request", async () => {
+    const created = await createRoom(server);
+    const host = await TestClient.connect(server.wsUrl);
+    host.auth(created.sessionToken);
+    await host.waitFor((f) => f.type === "auth.ok");
+
+    host.send({
+      type: "claude.request",
+      content: "Read the repo",
+      mode: "repository_read",
+    });
+    const parked = (await host.waitForEvent("claude.approval_required")) as EventFrame;
+    const requestId = (parked.event.payload as { request: { id: string } }).request.id;
+
+    host.send({ type: "claude.reject", requestId });
+    await host.waitForEvent("claude.rejected");
+    expect(server.rooms.getClaudeRequest(requestId).status).toBe("rejected");
+
+    // A rejected request is terminal: approving it afterwards fails.
+    host.send({ type: "claude.approve", requestId });
+    const error = (await host.waitFor((f) => f.type === "error")) as ErrorFrame;
+    expect(error.code).toBe("INVALID_TRANSITION");
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const started = host.frames.some(
+      (f) => f.type === "event" && f.event.type === "claude.started",
+    );
+    expect(started).toBe(false);
+    host.close();
+  });
+
+  it("still runs discussion-only requests without any approval", async () => {
+    const created = await createRoom(server);
+    const host = await TestClient.connect(server.wsUrl);
+    host.auth(created.sessionToken);
+    await host.waitFor((f) => f.type === "auth.ok");
+
+    host.send({
+      type: "claude.request",
+      content: "What do you think?",
+      mode: "discussion_only",
+    });
+    await host.waitForEvent("claude.started");
+    const approvalAsked = host.frames.some(
+      (f) => f.type === "event" && f.event.type === "claude.approval_required",
+    );
+    expect(approvalAsked).toBe(false);
+    host.close();
   });
 
   it("never exposes raw tokens through the API surface", async () => {

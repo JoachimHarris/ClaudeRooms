@@ -1,4 +1,5 @@
 import type {
+  ClaudeRequestView,
   DecisionView,
   MessageView,
   ParticipantView,
@@ -23,6 +24,8 @@ export interface RoomState {
   timeline: TimelineItem[];
   /** requestId → text streamed so far for an in-flight Claude response. */
   streaming: Record<string, string>;
+  /** Requests parked until the host decides, newest last. */
+  pendingApprovals: ClaudeRequestView[];
   claudeStatus: ClaudeStatus;
   lastSequence: number;
   notice: string | null;
@@ -36,6 +39,7 @@ export const initialRoomState: RoomState = {
   decisions: {},
   timeline: [],
   streaming: {},
+  pendingApprovals: [],
   claudeStatus: "ready",
   lastSequence: 0,
   notice: null,
@@ -78,6 +82,7 @@ function applyFrame(state: RoomState, frame: ServerFrame): RoomState {
         room: frame.room,
         self: frame.self,
         streaming: {},
+        pendingApprovals: [],
         claudeStatus: "ready",
         participants: Object.fromEntries(frame.participants.map((p) => [p.id, p])),
         decisions: {
@@ -179,8 +184,40 @@ function applyEnvelope(base: RoomState, envelope: ProtocolEnvelope): RoomState {
         timeline: [...state.timeline, { kind: "message", message }],
       };
     }
-    case "claude.requested":
-      return { ...state, claudeStatus: "thinking" };
+    case "claude.requested": {
+      const { request } = envelope.payload as { request: ClaudeRequestView };
+      // A parked request is not "thinking" — it is waiting for a human.
+      return request.status === "awaiting_approval"
+        ? state
+        : { ...state, claudeStatus: "thinking" };
+    }
+    case "claude.approval_required": {
+      const { request } = envelope.payload as { request: ClaudeRequestView };
+      if (state.pendingApprovals.some((pending) => pending.id === request.id)) {
+        return state;
+      }
+      return { ...state, pendingApprovals: [...state.pendingApprovals, request] };
+    }
+    case "claude.approved": {
+      const { request } = envelope.payload as { request: ClaudeRequestView };
+      return {
+        ...state,
+        claudeStatus: "thinking",
+        pendingApprovals: state.pendingApprovals.filter((p) => p.id !== request.id),
+      };
+    }
+    case "claude.rejected": {
+      const { request } = envelope.payload as { request: ClaudeRequestView };
+      return pushSystem(
+        {
+          ...state,
+          pendingApprovals: state.pendingApprovals.filter((p) => p.id !== request.id),
+        },
+        envelope.eventId,
+        "The host declined that repository request",
+        envelope.occurredAt,
+      );
+    }
     case "claude.started": {
       const { requestId } = envelope.payload as { requestId: string };
       return {
@@ -218,16 +255,19 @@ function applyEnvelope(base: RoomState, envelope: ProtocolEnvelope): RoomState {
       return { ...state, streaming, claudeStatus: "ready", timeline: withMessage };
     }
     case "claude.failed": {
-      const { requestId, failureCode } = envelope.payload as {
+      const { requestId, failureCode, message } = envelope.payload as {
         requestId: string;
         failureCode: string;
+        message: string;
       };
       const streaming = { ...state.streaming };
       delete streaming[requestId];
+      // Show the reason, not just the code: the failure message is where we
+      // explain *why* Claude could not answer, and a bare code hides it.
       return pushSystem(
         { ...state, streaming, claudeStatus: "ready" },
         envelope.eventId,
-        `Claude request failed (${failureCode})`,
+        message ? `Claude: ${message}` : `Claude request failed (${failureCode})`,
         envelope.occurredAt,
       );
     }

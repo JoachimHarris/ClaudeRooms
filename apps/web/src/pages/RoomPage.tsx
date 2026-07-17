@@ -7,6 +7,7 @@ import { navigate } from "../router.js";
 import { ParticipantsList } from "../components/ParticipantsList.js";
 import { Timeline } from "../components/Timeline.js";
 import { Composer, type ComposerMode } from "../components/Composer.js";
+import { ApprovalStrip } from "../components/ApprovalStrip.js";
 import { DecisionsPanel, type DecisionPrefill } from "../components/DecisionsPanel.js";
 
 function connectionLabel(connection: string): string {
@@ -119,9 +120,12 @@ export function RoomPage({ roomId }: { roomId: string }) {
   }
 
   function send(mode: ComposerMode, content: string) {
+    // Explicit invocation only: these are the sole paths to Claude, and the
+    // repository one only ever *asks* — the host decides (M5).
     if (mode === "claude") {
-      // Explicit invocation only: this is the sole path to Claude.
       sendOrWarn({ type: "claude.request", content, mode: "discussion_only" });
+    } else if (mode === "claude-repo") {
+      sendOrWarn({ type: "claude.request", content, mode: "repository_read" });
     } else {
       sendOrWarn({ type: "chat.send", content });
     }
@@ -206,6 +210,13 @@ export function RoomPage({ roomId }: { roomId: string }) {
         />
         <section className="conversation" aria-label="Conversation">
           <Timeline state={state} onProposeFromMessage={proposeFromMessage} />
+          <ApprovalStrip
+            pending={state.pendingApprovals}
+            participants={state.participants}
+            isHost={isHost}
+            onApprove={(requestId) => sendOrWarn({ type: "claude.approve", requestId })}
+            onReject={(requestId) => sendOrWarn({ type: "claude.reject", requestId })}
+          />
           <Composer disabled={!roomOpen} onSend={send} />
           {state.room?.status === "ended" && (
             <p className="muted small ended-note">

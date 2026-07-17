@@ -126,18 +126,42 @@ export function registerWs(
             return;
           }
           case "claude.request": {
-            const { request: claudeRequest, envelopes } = rooms.createClaudeRequest(
-              participant,
-              frame.content,
-              frame.mode,
-            );
+            const {
+              request: claudeRequest,
+              envelopes,
+              runnable,
+            } = rooms.createClaudeRequest(participant, frame.content, frame.mode);
             for (const envelope of envelopes) hub.broadcast(roomId, envelope);
-            // Fire and forget: the hub reports success/failure as room events.
+            // Only the domain layer decides whether this may run — never the
+            // mode string here. A parked request waits for the host.
+            if (runnable) {
+              void hub.runClaudeRequest({
+                requestId: claudeRequest.id,
+                roomId,
+                content: claudeRequest.content,
+                mode: claudeRequest.mode,
+              });
+            }
+            return;
+          }
+          case "claude.approve": {
+            // Host-only and single-use; both enforced in the domain layer.
+            const { request: approved, envelope } = rooms.approveClaudeRequest(
+              participant,
+              frame.requestId,
+            );
+            hub.broadcast(roomId, envelope);
             void hub.runClaudeRequest({
-              requestId: claudeRequest.id,
+              requestId: approved.id,
               roomId,
-              content: frame.content,
+              content: approved.content,
+              mode: approved.mode,
             });
+            return;
+          }
+          case "claude.reject": {
+            const { envelope } = rooms.rejectClaudeRequest(participant, frame.requestId);
+            hub.broadcast(roomId, envelope);
             return;
           }
           case "decision.propose": {

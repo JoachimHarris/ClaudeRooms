@@ -1,5 +1,9 @@
 import type { WebSocket } from "ws";
-import type { ProtocolEnvelope, ServerFrame } from "@clauderooms/shared";
+import type {
+  ClaudeRequestMode,
+  ProtocolEnvelope,
+  ServerFrame,
+} from "@clauderooms/shared";
 import type { RoomService } from "./rooms.js";
 import type { ClaudeAdapter } from "./claude/adapter.js";
 import type { BridgeConnection } from "./claude/bridge-adapter.js";
@@ -139,6 +143,7 @@ export class RoomHub {
     requestId: string;
     roomId: string;
     content: string;
+    mode: ClaudeRequestMode;
   }): Promise<void> {
     const runner = this.claudeRunner(input.roomId);
     const timeout = setTimeout(() => {
@@ -151,7 +156,7 @@ export class RoomHub {
         requestId: input.requestId,
         roomId: input.roomId,
         content: input.content,
-        mode: "discussion_only",
+        mode: input.mode,
       });
       for await (const event of events) {
         switch (event.type) {
