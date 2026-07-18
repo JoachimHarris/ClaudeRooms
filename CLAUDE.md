@@ -21,12 +21,14 @@ hosted (cloud, remote guests). Step 1 (engine serves the built web client via
 verified the packaged app self-hosts a room with no dev servers. Note:
 `pnpm run package` rebuilds the workspace `better-sqlite3` for Electron's ABI,
 so run `pnpm rebuild -r better-sqlite3` afterward to restore dev/tests. Step 3
-(remote guests) is in progress: ADR-0010 decides the security-critical topology
-(host loads only local trusted UI; the desktop main proxies room data to a
-hosted engine; the engine never sees repo/credentials/host-window code), and
-the hosted-engine deploy surface (`CLAUDEROOMS_HOST`/`STATIC_DIR`,
-`docs/deploy/hosted-engine.md`) is done and verified; the desktop proxy + a
-real TLS deploy remain. Real Claude runs on the host via the Agent
+(remote guests) mechanism is complete and verified locally: ADR-0010 decides
+the security-critical topology (host loads only local trusted UI; the desktop
+main proxies room data to a hosted engine, dialing its WS with the hosted
+Origin; the engine never sees repo/credentials/host-window code). The
+hosted-engine deploy surface (`CLAUDEROOMS_HOST`/`STATIC_DIR`) and the host-side
+proxy (`hosted-proxy.ts`, `CLAUDEROOMS_ENGINE_URL`) are done and tested against
+a real hosted engine; only a real public TLS deployment + cross-network join
+remain (infrastructure, not code). Real Claude runs on the host via the Agent
 SDK inside the desktop app (delegated over `/bridge`), with dark/light theming
 and a persistent left rail of rooms backed by an encrypted room store
 (ADR-0008). Hosts use the Electron app (`apps/desktop`); browsers are
