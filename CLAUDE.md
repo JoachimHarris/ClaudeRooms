@@ -10,14 +10,18 @@ README and UI.
 
 ## Current stage
 
-Milestone 5 in progress: repository-aware Claude. Real Claude runs on the host
-via the Agent SDK inside the desktop app (delegated over `/bridge`), with
-dark/light theming and a persistent left rail of rooms backed by an encrypted
-room store (ADR-0008). A host-approved `repository_read` request now lets
-Claude actually read the repo under `RepoAccessPolicy` (step 2b done), and the
-files read render as a collapsible work card in the timeline (step 2c). Hosts
-use the Electron app (`apps/desktop`);
-browsers are guest-join only. Roadmap: `docs/product/build-plan.md`.
+Milestone 6 in progress: packaged app + remote guests (ADR-0009). Milestone 5
+is done — a host-approved `repository_read` lets Claude read the repo under
+`RepoAccessPolicy` (the gate is only enforced because every tool is forced onto
+`settings.permissions.ask`), with absolute-path redaction and a collapsible
+work card. M6 makes the engine deployable embedded (packaged app, loopback) or
+hosted (cloud, remote guests); step 1 — the engine serves the built web client
+via `staticDir` with an SPA fallback that never masks the API — is done and
+locked by `static-serving.test.ts`. Real Claude runs on the host via the Agent
+SDK inside the desktop app (delegated over `/bridge`), with dark/light theming
+and a persistent left rail of rooms backed by an encrypted room store
+(ADR-0008). Hosts use the Electron app (`apps/desktop`); browsers are
+guest-join only. Roadmap: `docs/product/build-plan.md`.
 Product truth lives in `docs/product/`, architecture in `docs/architecture/`,
 security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
 

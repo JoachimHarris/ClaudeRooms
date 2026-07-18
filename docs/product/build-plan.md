@@ -143,12 +143,32 @@ path ever leaving the desktop process.
 
 ## Milestone 6 — Packaged app + remote guests
 
-electron-builder packaging (macOS first): engine child process, web bundle
-served via the server's `staticDir`, sqlite-for-Electron ABI resolution,
-signing/notarization. A lightweight relay so invitation links work across
-networks (server component hosted, bridge connects outbound; TLS).
-**Accepted when:** a downloaded ClaudeRooms.app hosts a room a remote guest
-can join from any network.
+The architecture is decided in **ADR-0009**: the engine is one component,
+deployed either _embedded_ (in the packaged app's main process, loopback) or
+_hosted_ (cloud, for remote guests); the desktop app is a host bridge + local
+Claude runner in both cases and never accepts inbound connections.
+
+**Step 1 ✅ — the serving contract.** The packaged app loads its UI from the
+engine, not a Vite server. `buildServer({ staticDir })` serves the built web
+client with an SPA fallback that never masks the API (`/api/*` still returns a
+JSON 404). Locked as a regression test (`static-serving.test.ts`, 4 tests) so
+the contract the packaged runtime depends on cannot silently break — proven
+under system Node against a temp `staticDir`, and end-to-end against the real
+`apps/web` build (index, assets, SPA route all 200).
+
+**Step 2 — the package.** Replace the `app.isPackaged` bail with the real
+runtime: start the embedded engine in the main process bound to
+`127.0.0.1:0`, read the port, serve `staticDir` = the bundled web build, and
+load the window from that loopback origin (added to `allowedOrigins` so the
+same-origin WS is accepted). `electron-builder` (macOS first) rebuilds
+`better-sqlite3` for Electron's ABI in the packaged output only — dev and
+tests keep the system-Node build. **Accepted when:** a built `ClaudeRooms.app`
+hosts a local room with no dev servers running.
+
+**Step 3 — remote guests.** A hosted engine over TLS; the host bridge dials
+outbound to it and invitation links point at the hosted origin. No inbound
+host ports. **Accepted when:** a downloaded app hosts a room a remote guest can
+join from another network.
 
 ## Milestone 7 — Safe write actions
 
