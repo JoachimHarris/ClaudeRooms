@@ -40,7 +40,10 @@ const MAX_READABLE_BYTES = 1024 * 1024;
 export type AccessDecision =
   { allowed: true; realPath: string } | { allowed: false; reason: string };
 
-function isDeniedByName(candidate: string, repoRoot: string): string | null {
+// Exported so the write policy (write-access.ts) shares the exact same
+// credential/denied-directory list — reads and writes must never disagree
+// about what is off-limits.
+export function isDeniedByName(candidate: string, repoRoot: string): string | null {
   const relative = path.relative(repoRoot, candidate);
   const segments = relative.split(path.sep).filter(Boolean);
 

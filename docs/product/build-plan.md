@@ -206,13 +206,32 @@ mechanism is proven locally; this needs infrastructure, not code. **Accepted
 when:** a downloaded app hosts a room a remote guest can join from another
 network.
 
-## Milestone 7 — Safe write actions
+## Milestone 7 — Safe write actions (in progress)
 
-One narrowly scoped write action (create file in a safe directory / edit an
-explicitly selected file / run a predefined test command) behind explicit
-per-action host approval, with full audit trail. ActionProposal model.
-**Accepted when:** nothing executes before approval; approval binds to one
-proposal; rejected actions never run; results reported accurately.
+One narrowly scoped write action behind explicit per-action host approval, with
+a full audit trail. **ADR-0011** settles the model: Claude _proposes_
+`{ path, content }` with read-only tools and never writes; the host process
+executes the write, once, only on approval. Approval-before-execution is
+structural — there is no write tool in Claude's hands.
+
+**Step 1 ✅ — the write policy + executor.** `RepoWritePolicy` (write-access.ts)
+decides where an approved write may land: containment checked on the REAL
+_parent_ directory (so a `../` escape or a symlinked directory is rejected even
+for a file that does not exist yet), the credential/denied-dir deny-list shared
+verbatim with the read policy, no writing through a symlink, no directory
+creation, a 1 MiB ceiling. `applyWrite` re-checks immediately before touching
+disk. SDK-free and fully unit-tested — 12 tests, mutation-checked (removing the
+containment check fails exactly the two escape tests). This is the dangerous
+core, proven in isolation before any flow can call it (the order repo-access
+followed in M5).
+
+**Step 2 — the ActionProposal flow.** A `propose_write` tool + a
+`repository_write` request whose proposal is parked `awaiting_approval` (the M5
+approval spine); the host sees the exact path + content and approves one
+proposal; on approval the host process runs `applyWrite` and audits the written
+file as a work card; rejected proposals never touch disk. **Accepted when:**
+nothing executes before approval; approval binds to one proposal; rejected
+actions never run; results reported accurately.
 
 ## Milestone 8 — Claude Desktop/Code integration (additive)
 
