@@ -20,4 +20,12 @@ export default tseslint.config(
       eqeqeq: ["error", "smart"],
     },
   },
+  {
+    // Node build scripts (esbuild bundler, etc.) run under Node with its
+    // globals available.
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly" },
+    },
+  },
 );

@@ -156,14 +156,25 @@ the contract the packaged runtime depends on cannot silently break — proven
 under system Node against a temp `staticDir`, and end-to-end against the real
 `apps/web` build (index, assets, SPA route all 200).
 
-**Step 2 — the package.** Replace the `app.isPackaged` bail with the real
-runtime: start the embedded engine in the main process bound to
-`127.0.0.1:0`, read the port, serve `staticDir` = the bundled web build, and
-load the window from that loopback origin (added to `allowedOrigins` so the
-same-origin WS is accepted). `electron-builder` (macOS first) rebuilds
-`better-sqlite3` for Electron's ABI in the packaged output only — dev and
-tests keep the system-Node build. **Accepted when:** a built `ClaudeRooms.app`
-hosts a local room with no dev servers running.
+**Step 2 ✅ — the package.** The `app.isPackaged` bail is gone. The packaged
+runtime starts the embedded engine in the main process (`engine.ts`) bound to
+`127.0.0.1:0`, reads the port, serves `staticDir` = the bundled web build
+(`dist/web`), and loads the window from that loopback origin (pushed into
+`allowedOrigins` after listen, so the same-origin WS is accepted). The
+workspace packages are esbuild-bundled into `dist/main.mjs` and moved to
+devDependencies; only the runtime externals (better-sqlite3, fastify, the
+Agent SDK, ws) are collected from node_modules. `electron-builder --dir`
+(macOS arm64) rebuilds `better-sqlite3` for Electron's ABI and assembles
+`ClaudeRooms.app`. **Verified:** launched with all dev servers killed, the app
+starts its embedded engine, loads the UI from the loopback origin, and creates
+a room (SQLite write succeeds under Electron's ABI) — index/SPA/assets all 200.
+
+_Known rough edge:_ `@electron/rebuild` rebuilds the **workspace** copy of
+`better-sqlite3` for Electron (NODE_MODULE_VERSION 130), which then fails under
+system Node (115) — so `pnpm run package` breaks dev/tests until
+`pnpm rebuild -r better-sqlite3` restores the Node build. A later slice should
+package from an isolated install so the two never collide. Signing +
+notarization + a `.dmg` also remain (needs a Developer ID certificate).
 
 **Step 3 — remote guests.** A hosted engine over TLS; the host bridge dials
 outbound to it and invitation links point at the hosted origin. No inbound
