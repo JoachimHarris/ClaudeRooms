@@ -10,7 +10,16 @@ README and UI.
 
 ## Current stage
 
-Milestone 6 in progress: packaged app + remote guests (ADR-0009). Milestone 5
+Milestone 7 in progress: safe writes. ADR-0011 sets the model — Claude
+_proposes_ `{path, content}` with read-only tools and never writes; the host
+process executes on per-proposal approval, so approval-before-execution is
+structural. Step 1 (the dangerous core) is done: `RepoWritePolicy` +
+`applyWrite` in `apps/desktop/src/write-access.ts` (containment via the real
+parent dir, deny-list shared with the read policy, no symlink writes, 1 MiB
+cap), SDK-free and mutation-checked. Step 2 (the ActionProposal flow on the M5
+approval spine) is next.
+
+Milestone 6 done: packaged app + remote guests (ADR-0009). Milestone 5
 is done — a host-approved `repository_read` lets Claude read the repo under
 `RepoAccessPolicy` (the gate is only enforced because every tool is forced onto
 `settings.permissions.ask`), with absolute-path redaction and a collapsible
