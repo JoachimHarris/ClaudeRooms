@@ -84,6 +84,12 @@ no tunnel on the host. Scoped and built after the embedded package works.
   Electron-ABI build exists. Local verification of the serving path therefore
   runs under system Node against `staticDir`, and the Electron-ABI rebuild is
   proven in the packaged build itself.
+- **Rough edge (to fix):** `electron-builder`'s `@electron/rebuild` rebuilds
+  the _workspace_ `better-sqlite3` in place (pnpm's shared store), so after
+  `pnpm run package` the module is Electron-ABI and dev/tests fail until
+  `pnpm rebuild -r better-sqlite3` restores the Node build. Packaging should
+  eventually run from an isolated install so the workspace copy is never
+  touched.
 
 ## Alternatives considered
 

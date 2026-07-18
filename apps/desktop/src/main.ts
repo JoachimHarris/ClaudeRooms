@@ -5,19 +5,30 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { HostBridge } from "./bridge-client.js";
 import { RoomStore, toSummary, type StoredRoom } from "./room-store.js";
+import { startEmbeddedEngine, type EmbeddedEngine } from "./engine.js";
 
 // main runs as ESM (the Agent SDK is ESM-only), so __dirname must be derived.
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-// ClaudeRooms host application (Milestone 2).
+// ClaudeRooms host application.
 //
-// Dev stage: the window loads the Vite dev server, which proxies to the
-// collaboration server — `pnpm dev` at the repo root starts all three.
-// Packaged mode (engine child process + static web bundle via the server's
-// `staticDir` option) lands with Milestone 4; until then a packaged binary
-// exits with a clear message instead of pretending to work.
-const RENDERER_URL = process.env.CLAUDEROOMS_RENDERER_URL ?? "http://localhost:5173";
-const ENGINE_PORT = Number(process.env.CLAUDEROOMS_PORT ?? 3001);
+// Two runtimes (ADR-0009):
+// - Dev: the window loads the Vite dev server and the engine is a separate
+//   `apps/server` process — `pnpm dev` at the repo root starts all three.
+// - Packaged: the engine runs in THIS process on loopback and serves the built
+//   web client from `staticDir`; the window loads from that same origin.
+// `rendererOrigin` and `engineBridgeUrl` are resolved once at startup and used
+// by the window and the host bridge; everything downstream is mode-agnostic.
+const DEV_RENDERER_URL = process.env.CLAUDEROOMS_RENDERER_URL ?? "http://localhost:5173";
+const DEV_ENGINE_PORT = Number(process.env.CLAUDEROOMS_PORT ?? 3001);
+
+// Packaged unless we are clearly running from source; the env var lets us
+// exercise the packaged runtime under `electron .` without a full build.
+const isPackagedRuntime = () => app.isPackaged || process.env.CLAUDEROOMS_PROD === "1";
+
+let rendererOrigin = DEV_RENDERER_URL;
+let engineBridgeUrl = `ws://localhost:${DEV_ENGINE_PORT}/bridge`;
+let embeddedEngine: EmbeddedEngine | null = null;
 
 // Without this, userData is derived from the package name and becomes
 // "~/Library/Application Support/@clauderooms/desktop". Set before any
@@ -126,10 +137,8 @@ ipcMain.handle("clauderooms:start-bridge", async (_event, raw: unknown) => {
   if (!parsed.success) return { ok: false, reason: "invalid input" };
 
   bridge?.stop();
-  const engineOrigin = new URL(RENDERER_URL);
-  const bridgeUrl = `ws://${engineOrigin.hostname}:${ENGINE_PORT}/bridge`;
   bridge = new HostBridge({
-    engineUrl: bridgeUrl,
+    engineUrl: engineBridgeUrl,
     token: parsed.data.sessionToken,
     getRepoPath: () => currentRepoPath,
     onStatus: (status) => console.log(`[clauderooms] bridge ${status}`),
@@ -190,7 +199,7 @@ function createWindow(): void {
 
   // The window shows our own UI only. External links (e.g. GitHub) open in
   // the system browser; navigating the window itself elsewhere is denied.
-  const allowedOrigin = new URL(RENDERER_URL).origin;
+  const allowedOrigin = new URL(rendererOrigin).origin;
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) void shell.openExternal(url);
     return { action: "deny" };
@@ -202,21 +211,13 @@ function createWindow(): void {
     }
   });
 
-  void window.loadURL(RENDERER_URL);
+  void window.loadURL(rendererOrigin);
   window.webContents.once("did-finish-load", () => {
-    console.log(`[clauderooms] renderer loaded from ${RENDERER_URL}`);
+    console.log(`[clauderooms] renderer loaded from ${rendererOrigin}`);
   });
 }
 
 app.whenReady().then(async () => {
-  if (app.isPackaged) {
-    dialog.showErrorBox(
-      "ClaudeRooms",
-      "Packaged mode is not implemented yet (Milestone 4). Run from source with `pnpm dev`.",
-    );
-    app.quit();
-    return;
-  }
   roomStore = new RoomStore();
   roomStore.load();
   if (!roomStore.canPersist) {
@@ -227,12 +228,36 @@ app.whenReady().then(async () => {
     );
   }
 
-  try {
-    await waitForRenderer(RENDERER_URL, 120_000);
-  } catch (error) {
-    console.error("[clauderooms]", error);
-    app.quit();
-    return;
+  if (isPackagedRuntime()) {
+    // Packaged: run the engine in-process and serve the built web client from
+    // it (ADR-0009). No dev servers; the window and bridge both point at the
+    // engine's loopback origin.
+    try {
+      embeddedEngine = await startEmbeddedEngine({
+        dbPath: path.join(app.getPath("userData"), "clauderooms.db"),
+        staticDir: path.join(here, "web"),
+      });
+      rendererOrigin = embeddedEngine.origin;
+      engineBridgeUrl = embeddedEngine.bridgeUrl;
+      console.log(`[clauderooms] embedded engine on ${embeddedEngine.origin}`);
+    } catch (error) {
+      console.error("[clauderooms] embedded engine failed to start", error);
+      dialog.showErrorBox(
+        "ClaudeRooms",
+        "The collaboration engine failed to start. See logs for details.",
+      );
+      app.quit();
+      return;
+    }
+  } else {
+    // Dev: wait for the Vite renderer; the engine is a separate process.
+    try {
+      await waitForRenderer(rendererOrigin, 120_000);
+    } catch (error) {
+      console.error("[clauderooms]", error);
+      app.quit();
+      return;
+    }
   }
   createWindow();
   console.log(
@@ -246,4 +271,13 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   app.quit();
+});
+
+// Shut the embedded engine down cleanly so its SQLite handle is released.
+app.on("will-quit", (event) => {
+  if (!embeddedEngine) return;
+  const engine = embeddedEngine;
+  embeddedEngine = null;
+  event.preventDefault();
+  void engine.close().finally(() => app.quit());
 });

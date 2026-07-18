@@ -15,9 +15,13 @@ is done — a host-approved `repository_read` lets Claude read the repo under
 `RepoAccessPolicy` (the gate is only enforced because every tool is forced onto
 `settings.permissions.ask`), with absolute-path redaction and a collapsible
 work card. M6 makes the engine deployable embedded (packaged app, loopback) or
-hosted (cloud, remote guests); step 1 — the engine serves the built web client
-via `staticDir` with an SPA fallback that never masks the API — is done and
-locked by `static-serving.test.ts`. Real Claude runs on the host via the Agent
+hosted (cloud, remote guests). Step 1 (engine serves the built web client via
+`staticDir`) and step 2 (the package: `engine.ts` runs the engine in-process,
+`electron-builder --dir` builds a working `ClaudeRooms.app`) are done —
+verified the packaged app self-hosts a room with no dev servers. Note:
+`pnpm run package` rebuilds the workspace `better-sqlite3` for Electron's ABI,
+so run `pnpm rebuild -r better-sqlite3` afterward to restore dev/tests. Step 3
+(remote guests) is next. Real Claude runs on the host via the Agent
 SDK inside the desktop app (delegated over `/bridge`), with dark/light theming
 and a persistent left rail of rooms backed by an encrypted room store
 (ADR-0008). Hosts use the Electron app (`apps/desktop`); browsers are

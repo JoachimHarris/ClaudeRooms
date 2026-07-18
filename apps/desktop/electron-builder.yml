@@ -1,0 +1,38 @@
+appId: com.clauderooms.host
+productName: ClaudeRooms
+# Not affiliated with or endorsed by Anthropic — kept out of the identifier too.
+copyright: ClaudeRooms contributors
+
+directories:
+  output: release
+  buildResources: build
+
+# The main bundle + its runtime-external node_modules. Workspace TypeScript is
+# already bundled into dist/main.mjs; only the externals (better-sqlite3,
+# fastify, the Agent SDK, ws) resolve from node_modules at runtime.
+# The workspace packages (@clauderooms/server, @clauderooms/shared) are
+# esbuild-bundled into dist/main.mjs, so they live in devDependencies and are
+# never collected here — only the external runtime deps (better-sqlite3,
+# fastify, the Agent SDK, ws) come from node_modules.
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+
+# better-sqlite3 ships a native .node addon that cannot run from inside the
+# asar archive — unpack it so the runtime can dlopen it.
+asarUnpack:
+  - "**/*.node"
+  - "**/node_modules/better-sqlite3/**"
+
+# Rebuild native modules against Electron's ABI in the packaged output only;
+# the workspace node_modules keep their system-Node build for dev and tests.
+npmRebuild: true
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dir
+  # Local unsigned build for verification. Real signing + notarization is a
+  # later slice (needs a Developer ID certificate).
+  identity: null
