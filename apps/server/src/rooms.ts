@@ -70,6 +70,8 @@ interface ClaudeRequestRow {
   failure_code: string | null;
   approved_by: string | null;
   approved_at: string | null;
+  write_path: string | null;
+  write_content: string | null;
 }
 
 interface DecisionRow {
@@ -154,6 +156,10 @@ export class RoomService {
       content: row.content,
       mode: row.mode as ClaudeRequestView["mode"],
       status: row.status as ClaudeRequestView["status"],
+      write:
+        row.write_path !== null && row.write_content !== null
+          ? { path: row.write_path, content: row.write_content }
+          : null,
       requestedAt: row.requested_at,
       startedAt: row.started_at,
       completedAt: row.completed_at,
@@ -499,6 +505,7 @@ export class RoomService {
     participant: Omit<ParticipantView, "connected">,
     content: string,
     mode: ClaudeRequestView["mode"],
+    write?: { path: string; content: string },
   ): {
     request: ClaudeRequestView;
     message: MessageView;
@@ -507,6 +514,18 @@ export class RoomService {
     runnable: boolean;
   } {
     this.requireOpenRoom(participant.roomId);
+    // A repository_write request must carry the proposed write, and no other
+    // mode may — the proposal is the whole point of the write request, and
+    // smuggling one onto a read/discussion request must not park a hidden write.
+    if (mode === "repository_write" && !write) {
+      throw new DomainError("INVALID_PAYLOAD", "a write request must carry a proposal");
+    }
+    if (mode !== "repository_write" && write) {
+      throw new DomainError(
+        "INVALID_PAYLOAD",
+        "only a write request may carry a proposal",
+      );
+    }
     const requestId = randomUUID();
     const requestedAt = now();
     // Modes that can reach the host's machine start parked. `runnable` is
@@ -518,8 +537,9 @@ export class RoomService {
     this.db
       .prepare(
         `INSERT INTO claude_requests
-           (id, room_id, created_by, content, mode, status, requested_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (id, room_id, created_by, content, mode, status, requested_at,
+            write_path, write_content)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         requestId,
@@ -529,6 +549,8 @@ export class RoomService {
         mode,
         status,
         requestedAt,
+        write?.path ?? null,
+        write?.content ?? null,
       );
 
     const message = this.insertMessage({
@@ -670,6 +692,74 @@ export class RoomService {
       request.roomId,
       "claude.repo_access",
       { requestId, files },
+      { type: "claude" },
+    );
+  }
+
+  /**
+   * Host-only. Only an *approved* write request (mode `repository_write`,
+   * status `pending`) can be marked applied or failed — so a rejected, unknown,
+   * or non-write request can never be reported as a completed write (M7). The
+   * physical write happens in the host's desktop; this records its outcome.
+   */
+  private requireApprovedWrite(
+    participant: Omit<ParticipantView, "connected">,
+    requestId: string,
+  ): ClaudeRequestView {
+    this.requireOpenRoom(participant.roomId);
+    if (participant.role !== "host") {
+      throw new DomainError("NOT_AUTHORIZED", "Only the host can apply a write");
+    }
+    const request = this.getClaudeRequest(requestId);
+    if (request.roomId !== participant.roomId) {
+      throw new DomainError("NOT_AUTHORIZED", "Request belongs to another room");
+    }
+    if (request.mode !== "repository_write") {
+      throw new DomainError("INVALID_TRANSITION", "Request is not a write");
+    }
+    if (request.status !== "pending") {
+      throw new DomainError(
+        "INVALID_TRANSITION",
+        `Write is not awaiting its result (status '${request.status}')`,
+      );
+    }
+    return request;
+  }
+
+  recordWriteApplied(
+    participant: Omit<ParticipantView, "connected">,
+    requestId: string,
+    path: string,
+  ): ProtocolEnvelope {
+    const request = this.requireApprovedWrite(participant, requestId);
+    this.db
+      .prepare(
+        "UPDATE claude_requests SET status = 'completed', completed_at = ? WHERE id = ?",
+      )
+      .run(now(), requestId);
+    return this.appendEvent(
+      request.roomId,
+      "claude.write_applied",
+      { requestId, path },
+      { type: "claude" },
+    );
+  }
+
+  recordWriteFailed(
+    participant: Omit<ParticipantView, "connected">,
+    requestId: string,
+    reason: string,
+  ): ProtocolEnvelope {
+    const request = this.requireApprovedWrite(participant, requestId);
+    this.db
+      .prepare(
+        "UPDATE claude_requests SET status = 'failed', completed_at = ?, failure_code = ? WHERE id = ?",
+      )
+      .run(now(), "WRITE_REFUSED", requestId);
+    return this.appendEvent(
+      request.roomId,
+      "claude.failed",
+      { requestId, failureCode: "WRITE_REFUSED", message: reason },
       { type: "claude" },
     );
   }

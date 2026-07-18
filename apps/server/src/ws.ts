@@ -130,7 +130,12 @@ export function registerWs(
               request: claudeRequest,
               envelopes,
               runnable,
-            } = rooms.createClaudeRequest(participant, frame.content, frame.mode);
+            } = rooms.createClaudeRequest(
+              participant,
+              frame.content,
+              frame.mode,
+              frame.write,
+            );
             for (const envelope of envelopes) hub.broadcast(roomId, envelope);
             // Only the domain layer decides whether this may run — never the
             // mode string here. A parked request waits for the host.
@@ -151,16 +156,36 @@ export function registerWs(
               frame.requestId,
             );
             hub.broadcast(roomId, envelope);
-            void hub.runClaudeRequest({
-              requestId: approved.id,
-              roomId,
-              content: approved.content,
-              mode: approved.mode,
-            });
+            // A write is not run through the Claude adapter: the host's desktop
+            // applies it on seeing `claude.approved` and reports the outcome via
+            // `claude.write_result` (ADR-0011). Nothing runs here.
+            if (approved.mode !== "repository_write") {
+              void hub.runClaudeRequest({
+                requestId: approved.id,
+                roomId,
+                content: approved.content,
+                mode: approved.mode,
+              });
+            }
             return;
           }
           case "claude.reject": {
             const { envelope } = rooms.rejectClaudeRequest(participant, frame.requestId);
+            hub.broadcast(roomId, envelope);
+            return;
+          }
+          case "claude.write_result": {
+            // Host-only, and only for an approved write (enforced in the domain
+            // layer). This records the outcome of the write the host's desktop
+            // already applied to disk.
+            const envelope =
+              frame.ok && frame.path
+                ? rooms.recordWriteApplied(participant, frame.requestId, frame.path)
+                : rooms.recordWriteFailed(
+                    participant,
+                    frame.requestId,
+                    frame.reason ?? "the write could not be applied",
+                  );
             hub.broadcast(roomId, envelope);
             return;
           }

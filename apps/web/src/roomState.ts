@@ -272,6 +272,17 @@ function applyEnvelope(base: RoomState, envelope: ProtocolEnvelope): RoomState {
         ],
       };
     }
+    case "claude.write_applied": {
+      const { path } = envelope.payload as { requestId: string; path: string };
+      // The visible half of an approved write: the whole room sees exactly
+      // which repo-relative file landed on the host's disk.
+      return pushSystem(
+        { ...state, claudeStatus: "ready" },
+        envelope.eventId,
+        `Wrote ${path} to the repository`,
+        envelope.occurredAt,
+      );
+    }
     case "claude.failed": {
       const { requestId, failureCode, message } = envelope.payload as {
         requestId: string;

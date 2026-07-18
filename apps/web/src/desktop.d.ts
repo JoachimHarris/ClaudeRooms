@@ -51,6 +51,11 @@ interface ClaudeRoomsDesktopBridge {
     sessionToken: string;
   }) => Promise<{ ok: boolean; reason?: string }>;
   stopBridge: () => Promise<{ ok: boolean }>;
+  /** Applies an approved write on the host machine (M7); host UI only. */
+  applyWrite: (input: {
+    path: string;
+    content: string;
+  }) => Promise<{ ok: boolean; path?: string; reason?: string }>;
 }
 
 interface Window {

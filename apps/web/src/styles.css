@@ -774,6 +774,41 @@ label > textarea {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.approval-write {
+  margin: 0 0 var(--space-1);
+  border: 1px solid color-mix(in srgb, var(--claude) 25%, transparent);
+  border-radius: var(--radius);
+  background: var(--claude-soft);
+  overflow: hidden;
+}
+.approval-write-path {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px solid color-mix(in srgb, var(--claude) 20%, transparent);
+}
+.approval-write-content {
+  margin: 0;
+  padding: var(--space-2);
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.write-path {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
 .approval-actions {
   display: flex;
   gap: var(--space-2);

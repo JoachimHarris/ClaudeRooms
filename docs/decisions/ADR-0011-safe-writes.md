@@ -20,19 +20,23 @@ A write is not: once Claude's tool call lands, the file is already changed, so
 
 ## Decision
 
-1. **Claude proposes; it never writes.** A write is an **ActionProposal**: a
-   first-class object `{ path (repo-relative), content, rationale }` that Claude
-   produces with read-only tools. Claude is given `Read`/`Glob` (gated by
-   `RepoAccessPolicy`, as in M5) and a single custom `propose_write` tool that
-   only records the proposal — it changes nothing on disk.
+1. **The proposal is the request; nothing has a write tool.** A write is a
+   `repository_write` request that _carries_ the concrete ActionProposal
+   `{ path (repo-relative), content }`. Any participant can compose one —
+   typically from Claude's suggestion in the room — but neither Claude nor the
+   engine can write: the proposal is inert data until the host approves it.
+   (Letting Claude read the repo and emit the proposal itself, via a
+   `propose_write` tool, is a natural later enhancement on this same spine — it
+   adds a second gate for the read phase and is deferred as the heavier path.)
 
-2. **The host executes, once, after approval.** The proposal is parked
+2. **The host executes, once, after approval.** The request is parked
    `awaiting_approval` (the M5 flow). The host sees the exact path and content
    and approves or rejects. **Only on approval** does the host _process_ run the
-   write, via `applyWrite` under `RepoWritePolicy`. Rejected proposals never
-   touch disk. Approval is a one-way transition bound to that proposal id
-   (re-approving, or approving a rejected one, is `INVALID_TRANSITION`, exactly
-   like M5).
+   write, via `applyWrite` under `RepoWritePolicy` — the engine sends the
+   approved proposal down the host bridge, the desktop applies it and reports
+   the result. Rejected proposals never touch disk. Approval is a one-way
+   transition bound to that request id (re-approving, or approving a rejected
+   one, is `INVALID_TRANSITION`, exactly like M5).
 
 3. **`RepoWritePolicy` gates the path, always.** Containment is checked on the
    REAL parent directory (so a `../` escape or a symlinked directory is rejected

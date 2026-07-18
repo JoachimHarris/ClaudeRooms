@@ -27,10 +27,14 @@ export type MessageType =
  * `discussion_only` requires explicit host approval before it runs, and the
  * approval is bound to that one request — never granted as a standing right.
  */
-export type ClaudeRequestMode = "discussion_only" | "repository_read";
+export type ClaudeRequestMode =
+  "discussion_only" | "repository_read" | "repository_write";
 
 /** Modes the host must approve before the request may run at all. */
-export const MODES_REQUIRING_APPROVAL: readonly ClaudeRequestMode[] = ["repository_read"];
+export const MODES_REQUIRING_APPROVAL: readonly ClaudeRequestMode[] = [
+  "repository_read",
+  "repository_write",
+];
 
 export function requiresApproval(mode: ClaudeRequestMode): boolean {
   return MODES_REQUIRING_APPROVAL.includes(mode);
@@ -83,6 +87,8 @@ export interface ClaudeRequestView {
   content: string;
   mode: ClaudeRequestMode;
   status: ClaudeRequestStatus;
+  /** The proposed file write for a `repository_write` request; null otherwise. */
+  write: { path: string; content: string } | null;
   requestedAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -124,6 +130,7 @@ export const ERROR_CODES = [
   "CLAUDE_BILLING",
   "CLAUDE_RATE_LIMITED",
   "REPOSITORY_NOT_CONNECTED",
+  "WRITE_REFUSED",
   "PROTOCOL_VERSION_UNSUPPORTED",
   "INTERNAL",
 ] as const;

@@ -38,7 +38,20 @@ export const messageViewSchema = z.object({
   createdAt: z.string(),
 });
 
-export const claudeRequestModeSchema = z.enum(["discussion_only", "repository_read"]);
+export const claudeRequestModeSchema = z.enum([
+  "discussion_only",
+  "repository_read",
+  "repository_write",
+]);
+
+// A proposed file write (Milestone 7, ADR-0011). Carried by a
+// `repository_write` request; inert data until the host approves it. The path
+// is repo-relative; the host process resolves + policy-checks it before any
+// write. Content is capped well below the write policy's 1 MiB ceiling.
+export const writeProposalSchema = z.object({
+  path: z.string().min(1).max(1024),
+  content: z.string().max(1_000_000),
+});
 
 export const claudeRequestViewSchema = z.object({
   id: z.string().uuid(),
@@ -55,6 +68,8 @@ export const claudeRequestViewSchema = z.object({
     "failed",
     "cancelled",
   ]),
+  /** The proposed write for a `repository_write` request; null otherwise. */
+  write: writeProposalSchema.nullable(),
   requestedAt: z.string(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
@@ -121,6 +136,12 @@ export const eventPayloadSchemas = {
   "claude.repo_access": z.object({
     requestId: z.string().uuid(),
     files: z.array(z.string().max(1024)).max(200),
+  }),
+  // Audit: an approved write was applied to the repo. The path is repo-relative
+  // — the host's absolute path never appears.
+  "claude.write_applied": z.object({
+    requestId: z.string().uuid(),
+    path: z.string().max(1024),
   }),
   "decision.proposed": z.object({ decision: decisionViewSchema }),
   "decision.accepted": z.object({ decision: decisionViewSchema }),
@@ -199,6 +220,9 @@ export const clientFrameSchema = z.discriminatedUnion("type", [
     type: z.literal("claude.request"),
     content: contentSchema,
     mode: claudeRequestModeSchema,
+    // Required for `repository_write` (the proposed file write); ignored
+    // otherwise. The engine validates the pairing.
+    write: writeProposalSchema.optional(),
   }),
   // Host-only; the server derives the role from the session token, so these
   // are safe to expose to every client.
@@ -209,6 +233,16 @@ export const clientFrameSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("claude.reject"),
     requestId: z.string().uuid(),
+  }),
+  // Host-only: the desktop reports the outcome of an approved write it applied
+  // locally (ADR-0011). The engine records it only for an approved write
+  // request, so a rejected or unknown request cannot be marked applied.
+  z.object({
+    type: z.literal("claude.write_result"),
+    requestId: z.string().uuid(),
+    ok: z.boolean(),
+    path: z.string().max(1024).optional(),
+    reason: z.string().max(500).optional(),
   }),
   z.object({
     type: z.literal("decision.propose"),
