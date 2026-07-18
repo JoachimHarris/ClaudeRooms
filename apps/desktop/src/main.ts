@@ -7,6 +7,7 @@ import { HostBridge } from "./bridge-client.js";
 import { RoomStore, toSummary, type StoredRoom } from "./room-store.js";
 import { startEmbeddedEngine, type EmbeddedEngine } from "./engine.js";
 import { startHostedProxy, type HostedProxy } from "./hosted-proxy.js";
+import { RepoWritePolicy, WriteRefused, applyWrite } from "./write-access.js";
 
 // main runs as ESM (the Agent SDK is ESM-only), so __dirname must be derived.
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -158,6 +159,35 @@ ipcMain.handle("clauderooms:stop-bridge", async () => {
   bridge?.stop();
   bridge = null;
   return { ok: true };
+});
+
+const applyWriteInputSchema = z.object({
+  path: z.string().min(1).max(1024),
+  content: z.string().max(1_000_000),
+});
+
+/**
+ * Performs an approved write on the host machine (M7, ADR-0011). Only ever
+ * called by the host's own trusted renderer after the engine confirmed the
+ * approval; every write is re-checked against RepoWritePolicy here, and only a
+ * repo-relative path (never the host's absolute path) is returned.
+ */
+ipcMain.handle("clauderooms:apply-write", async (_event, raw: unknown) => {
+  const parsed = applyWriteInputSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: "invalid write" };
+  if (!currentRepoPath) {
+    return { ok: false, reason: "No repository is connected in this session." };
+  }
+  try {
+    const policy = new RepoWritePolicy(currentRepoPath);
+    const { relativePath } = applyWrite(policy, parsed.data.path, parsed.data.content);
+    return { ok: true, path: relativePath };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof WriteRefused ? error.message : "the write failed",
+    };
+  }
 });
 
 ipcMain.handle("clauderooms:pick-repo", async () => {

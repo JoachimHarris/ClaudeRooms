@@ -7,6 +7,7 @@ import type { ClaudeRequestView, ParticipantView } from "@clauderooms/shared";
 
 const MODE_LABEL: Record<string, string> = {
   repository_read: "read this repository",
+  repository_write: "write to this repository",
 };
 
 function requesterName(
@@ -43,9 +44,18 @@ export function ApprovalStrip({
             {/* The request verbatim: the host approves what was actually
                 asked, not a paraphrase of it. */}
             <p className="approval-quote">{request.content}</p>
+            {/* For a write, the host reviews the EXACT path and bytes that will
+                land before approving — never a paraphrase (M7, ADR-0011). */}
+            {request.write && (
+              <div className="approval-write">
+                <p className="approval-write-path">{request.write.path}</p>
+                <pre className="approval-write-content">{request.write.content}</pre>
+              </div>
+            )}
             <p className="muted small">
-              Claude has no repository access until you allow it, and this applies to this
-              one request only.
+              {request.write
+                ? "Nothing is written until you approve, and this approves exactly this one file."
+                : "Claude has no repository access until you allow it, and this applies to this one request only."}
             </p>
           </div>
           {isHost ? (

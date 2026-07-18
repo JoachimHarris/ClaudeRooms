@@ -1,21 +1,34 @@
 import { useState } from "react";
 import { LIMITS } from "@clauderooms/shared";
 
-export type ComposerMode = "room" | "claude" | "claude-repo";
+export type ComposerMode = "room" | "claude" | "claude-repo" | "propose-write";
 
 export function Composer({
   disabled,
   onSend,
 }: {
   disabled: boolean;
-  onSend: (mode: ComposerMode, content: string) => void;
+  onSend: (mode: ComposerMode, content: string, path?: string) => void;
 }) {
   const [mode, setMode] = useState<ComposerMode>("room");
   const [content, setContent] = useState("");
+  const [writePath, setWritePath] = useState("");
+
+  const isWrite = mode === "propose-write";
 
   function submit() {
+    if (disabled) return;
+    if (isWrite) {
+      const path = writePath.trim();
+      // A write with no content is still valid (an empty file); the path is not.
+      if (!path) return;
+      onSend(mode, content, path);
+      setContent("");
+      setWritePath("");
+      return;
+    }
     const trimmed = content.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed) return;
     onSend(mode, trimmed);
     setContent("");
   }
@@ -41,37 +54,65 @@ export function Composer({
         <option value="room">Message room</option>
         <option value="claude">Ask Claude</option>
         <option value="claude-repo">Ask Claude: use repository</option>
+        <option value="propose-write">Propose a file write</option>
       </select>
+      {isWrite && (
+        <input
+          id="composer-write-path"
+          className="write-path"
+          value={writePath}
+          maxLength={1024}
+          placeholder="Repo-relative path, e.g. src/notes.md"
+          aria-label="File path to write"
+          onChange={(e) => setWritePath(e.target.value)}
+          disabled={disabled}
+        />
+      )}
       <label className="visually-hidden" htmlFor="composer-input">
-        {mode.startsWith("claude") ? "Ask Claude" : "Message the room"}
+        {isWrite
+          ? "File contents"
+          : mode.startsWith("claude")
+            ? "Ask Claude"
+            : "Message the room"}
       </label>
       <textarea
         id="composer-input"
         value={content}
-        maxLength={LIMITS.maxMessageLength}
+        maxLength={isWrite ? 1_000_000 : LIMITS.maxMessageLength}
         placeholder={
-          mode === "claude"
-            ? "Ask Claude explicitly — discussion only, no repository access…"
-            : mode === "claude-repo"
-              ? "Ask Claude to look at the repository — the host must allow it first…"
-              : "Write a message to the room…"
+          isWrite
+            ? "File contents to write — the host reviews this before it lands…"
+            : mode === "claude"
+              ? "Ask Claude explicitly — discussion only, no repository access…"
+              : mode === "claude-repo"
+                ? "Ask Claude to look at the repository — the host must allow it first…"
+                : "Write a message to the room…"
         }
         onChange={(e) => setContent(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          if (e.key === "Enter" && !e.shiftKey && !isWrite) {
             e.preventDefault();
             submit();
           }
         }}
-        rows={2}
+        rows={isWrite ? 4 : 2}
         disabled={disabled}
       />
       <button
-        className={`btn ${mode.startsWith("claude") ? "claude-btn" : "primary"}`}
+        className={`btn ${mode === "room" ? "primary" : "claude-btn"}`}
         type="submit"
-        disabled={disabled || content.trim().length === 0}
+        disabled={
+          disabled ||
+          (isWrite ? writePath.trim().length === 0 : content.trim().length === 0)
+        }
       >
-        {mode === "claude-repo" ? "Request" : mode === "claude" ? "Ask Claude" : "Send"}
+        {isWrite
+          ? "Propose write"
+          : mode === "claude-repo"
+            ? "Request"
+            : mode === "claude"
+              ? "Ask Claude"
+              : "Send"}
       </button>
     </form>
   );

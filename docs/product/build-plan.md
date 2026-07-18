@@ -225,13 +225,23 @@ containment check fails exactly the two escape tests). This is the dangerous
 core, proven in isolation before any flow can call it (the order repo-access
 followed in M5).
 
-**Step 2 — the ActionProposal flow.** A `propose_write` tool + a
-`repository_write` request whose proposal is parked `awaiting_approval` (the M5
-approval spine); the host sees the exact path + content and approves one
-proposal; on approval the host process runs `applyWrite` and audits the written
-file as a work card; rejected proposals never touch disk. **Accepted when:**
-nothing executes before approval; approval binds to one proposal; rejected
-actions never run; results reported accurately.
+**Step 2 ✅ — the ActionProposal flow.** A `repository_write` request _carries_
+the concrete proposal `{ path, content }` and is parked `awaiting_approval` on
+the M5 spine. The host sees the exact path and the exact bytes (in the approval
+strip, never a paraphrase) and approves or rejects one request. Only on the
+engine-confirmed `claude.approved` does the host's own desktop apply the write —
+via the `applyWrite` IPC, re-checked against `RepoWritePolicy` — and report the
+outcome with `claude.write_result`; the engine records it as `claude.write_applied`
+(a system line) or a failure, and only ever for an _approved write_
+(`recordWriteApplied` refuses a rejected, unknown, or non-write request).
+Neither Claude nor the engine has a write tool, so approval-before-execution is
+structural. Guests (plain browsers) have no `applyWrite` bridge, so only the
+host machine can write. **Accepted — verified** by `write-flow.test.ts` (6
+domain tests): parked writes don't apply; only the host approves; a rejected
+write never applies; an applied write can't be re-applied; a non-write request
+can't be marked applied; a refused write is reported failed, not silently
+succeeded. Letting Claude read + emit the proposal itself (a `propose_write`
+tool, a second read gate) remains the deferred autonomy enhancement.
 
 ## Milestone 8 — Claude Desktop/Code integration (additive)
 

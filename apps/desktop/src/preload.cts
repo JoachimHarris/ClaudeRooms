@@ -22,4 +22,9 @@ electron.contextBridge.exposeInMainWorld("clauderooms", {
   startBridge: (input: { roomId: string; sessionToken: string }) =>
     electron.ipcRenderer.invoke("clauderooms:start-bridge", input),
   stopBridge: () => electron.ipcRenderer.invoke("clauderooms:stop-bridge"),
+  // Performs an approved write on the host machine (M7). The renderer calls
+  // this only after the engine confirms the approval; the main process
+  // re-checks every path against RepoWritePolicy.
+  applyWrite: (input: { path: string; content: string }) =>
+    electron.ipcRenderer.invoke("clauderooms:apply-write", input),
 });

@@ -99,6 +99,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE claude_requests ADD COLUMN approved_by TEXT;
   ALTER TABLE claude_requests ADD COLUMN approved_at TEXT;
   `,
+  // 3 — the proposed write carried by a repository_write request (M7)
+  `
+  ALTER TABLE claude_requests ADD COLUMN write_path TEXT;
+  ALTER TABLE claude_requests ADD COLUMN write_content TEXT;
+  `,
 ];
 
 export type AppDatabase = Database.Database;

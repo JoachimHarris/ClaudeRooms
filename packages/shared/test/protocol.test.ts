@@ -31,7 +31,7 @@ describe("clientFrameSchema", () => {
       clientFrameSchema.safeParse({
         type: "claude.request",
         content: "hi",
-        mode: "repository_write",
+        mode: "repository_delete",
       }).success,
     ).toBe(false);
   });

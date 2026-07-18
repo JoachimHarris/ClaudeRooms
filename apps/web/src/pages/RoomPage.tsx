@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import type { MessageView } from "@clauderooms/shared";
+import type { ClaudeRequestView, MessageView } from "@clauderooms/shared";
 import { resolveSession, type StoredSession } from "../session.js";
 import { RoomConnection } from "../ws-client.js";
 import { initialRoomState, roomReducer } from "../roomState.js";
@@ -68,7 +68,31 @@ export function RoomPage({ roomId }: { roomId: string }) {
     const connection = new RoomConnection({
       token: session.sessionToken,
       getSinceSequence: () => sequenceRef.current,
-      onFrame: (frame) => dispatch({ type: "frame", frame }),
+      onFrame: (frame) => {
+        dispatch({ type: "frame", frame });
+        // Host-side execution (M7, ADR-0011): only the host's desktop has the
+        // applyWrite bridge, and it acts only on the engine's confirmed
+        // approval — so nothing writes before the host approves. The main
+        // process re-checks the path; we report whatever it says.
+        if (
+          frame.type === "event" &&
+          frame.event.type === "claude.approved" &&
+          window.clauderooms
+        ) {
+          const { request } = frame.event.payload as { request: ClaudeRequestView };
+          if (request.mode === "repository_write" && request.write) {
+            void window.clauderooms.applyWrite(request.write).then((result) => {
+              connectionRef.current?.send({
+                type: "claude.write_result",
+                requestId: request.id,
+                ok: result.ok,
+                ...(result.path ? { path: result.path } : {}),
+                ...(result.reason ? { reason: result.reason } : {}),
+              });
+            });
+          }
+        }
+      },
       onStatus: (status) => dispatch({ type: "status", status }),
     });
     connectionRef.current = connection;
@@ -119,13 +143,23 @@ export function RoomPage({ roomId }: { roomId: string }) {
     return sent;
   }
 
-  function send(mode: ComposerMode, content: string) {
+  function send(mode: ComposerMode, content: string, path?: string) {
     // Explicit invocation only: these are the sole paths to Claude, and the
-    // repository one only ever *asks* — the host decides (M5).
+    // repository ones only ever *ask* — the host decides (M5, M7).
     if (mode === "claude") {
       sendOrWarn({ type: "claude.request", content, mode: "discussion_only" });
     } else if (mode === "claude-repo") {
       sendOrWarn({ type: "claude.request", content, mode: "repository_read" });
+    } else if (mode === "propose-write") {
+      if (!path) return;
+      // The proposal is inert until the host approves it; the request content is
+      // a human-readable label, the write payload carries the exact bytes.
+      sendOrWarn({
+        type: "claude.request",
+        content: `Propose write: ${path}`,
+        mode: "repository_write",
+        write: { path, content },
+      });
     } else {
       sendOrWarn({ type: "chat.send", content });
     }
