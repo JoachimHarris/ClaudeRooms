@@ -176,10 +176,23 @@ system Node (115) — so `pnpm run package` breaks dev/tests until
 package from an isolated install so the two never collide. Signing +
 notarization + a `.dmg` also remain (needs a Developer ID certificate).
 
-**Step 3 — remote guests.** A hosted engine over TLS; the host bridge dials
-outbound to it and invitation links point at the hosted origin. No inbound
-host ports. **Accepted when:** a downloaded app hosts a room a remote guest can
-join from another network.
+**Step 3 (in progress) — remote guests.** ADR-0010 settles the security-critical
+part: the host must reach a hosted room **without executing the engine's code
+with local privileges** (the host window holds `window.clauderooms`, which can
+return any remembered room's tokens). Decision: the host window only ever loads
+local trusted UI; the desktop main **proxies** the room to the hosted engine,
+and the bridge dials it outbound — the engine sees room data, never the repo,
+credentials, or host-window code.
+
+_Done + verified:_ the hosted engine (the same `apps/server`) now takes a
+configurable bind (`CLAUDEROOMS_HOST`, loopback by default), an optional
+`CLAUDEROOMS_STATIC_DIR`, and a public origin allow-list. Run standalone it
+serves the web client and hosts rooms with invitations — exactly what a remote
+guest connects to (`docs/deploy/hosted-engine.md`, `config.test.ts`).
+
+_Remaining:_ the desktop main-process proxy (host drives a hosted room), a real
+TLS-fronted deployment, and a cross-network guest join. **Accepted when:** a
+downloaded app hosts a room a remote guest can join from another network.
 
 ## Milestone 7 — Safe write actions
 
