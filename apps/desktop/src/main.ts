@@ -6,21 +6,27 @@ import { z } from "zod";
 import { HostBridge } from "./bridge-client.js";
 import { RoomStore, toSummary, type StoredRoom } from "./room-store.js";
 import { startEmbeddedEngine, type EmbeddedEngine } from "./engine.js";
+import { startHostedProxy, type HostedProxy } from "./hosted-proxy.js";
 
 // main runs as ESM (the Agent SDK is ESM-only), so __dirname must be derived.
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // ClaudeRooms host application.
 //
-// Two runtimes (ADR-0009):
+// Three runtimes (ADR-0009, ADR-0010):
 // - Dev: the window loads the Vite dev server and the engine is a separate
 //   `apps/server` process — `pnpm dev` at the repo root starts all three.
-// - Packaged: the engine runs in THIS process on loopback and serves the built
-//   web client from `staticDir`; the window loads from that same origin.
+// - Packaged (embedded): the engine runs in THIS process on loopback and
+//   serves the built web client; the window loads from that same origin.
+// - Hosted (CLAUDEROOMS_ENGINE_URL set): the room lives on a hosted engine.
+//   The window still loads LOCAL trusted UI from a loopback proxy — never the
+//   hosted engine's code — and the proxy forwards room data to it; the bridge
+//   dials the hosted engine directly.
 // `rendererOrigin` and `engineBridgeUrl` are resolved once at startup and used
 // by the window and the host bridge; everything downstream is mode-agnostic.
 const DEV_RENDERER_URL = process.env.CLAUDEROOMS_RENDERER_URL ?? "http://localhost:5173";
 const DEV_ENGINE_PORT = Number(process.env.CLAUDEROOMS_PORT ?? 3001);
+const HOSTED_ENGINE_URL = process.env.CLAUDEROOMS_ENGINE_URL?.replace(/\/+$/, "") ?? "";
 
 // Packaged unless we are clearly running from source; the env var lets us
 // exercise the packaged runtime under `electron .` without a full build.
@@ -29,6 +35,7 @@ const isPackagedRuntime = () => app.isPackaged || process.env.CLAUDEROOMS_PROD =
 let rendererOrigin = DEV_RENDERER_URL;
 let engineBridgeUrl = `ws://localhost:${DEV_ENGINE_PORT}/bridge`;
 let embeddedEngine: EmbeddedEngine | null = null;
+let hostedProxy: HostedProxy | null = null;
 
 // Without this, userData is derived from the package name and becomes
 // "~/Library/Application Support/@clauderooms/desktop". Set before any
@@ -228,7 +235,31 @@ app.whenReady().then(async () => {
     );
   }
 
-  if (isPackagedRuntime()) {
+  if (HOSTED_ENGINE_URL) {
+    // Hosted (ADR-0010): the room lives on a remote engine. Load LOCAL trusted
+    // UI from a loopback proxy that forwards room data to the hosted engine —
+    // the host window never runs the hosted engine's code. The bridge dials
+    // the hosted engine directly.
+    try {
+      hostedProxy = await startHostedProxy({
+        staticDir: path.join(here, "web"),
+        engineUrl: HOSTED_ENGINE_URL,
+      });
+      rendererOrigin = hostedProxy.origin;
+      engineBridgeUrl = `${HOSTED_ENGINE_URL.replace(/^http/, "ws")}/bridge`;
+      console.log(
+        `[clauderooms] hosted engine ${HOSTED_ENGINE_URL} via local proxy ${hostedProxy.origin}`,
+      );
+    } catch (error) {
+      console.error("[clauderooms] hosted proxy failed to start", error);
+      dialog.showErrorBox(
+        "ClaudeRooms",
+        "Could not connect to the hosted engine. See logs for details.",
+      );
+      app.quit();
+      return;
+    }
+  } else if (isPackagedRuntime()) {
     // Packaged: run the engine in-process and serve the built web client from
     // it (ADR-0009). No dev servers; the window and bridge both point at the
     // engine's loopback origin.
@@ -273,11 +304,13 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
-// Shut the embedded engine down cleanly so its SQLite handle is released.
+// Shut the embedded engine / hosted proxy down cleanly (release the SQLite
+// handle; drop the proxied sockets) before quitting.
 app.on("will-quit", (event) => {
-  if (!embeddedEngine) return;
-  const engine = embeddedEngine;
+  const closable = embeddedEngine ?? hostedProxy;
+  if (!closable) return;
   embeddedEngine = null;
+  hostedProxy = null;
   event.preventDefault();
-  void engine.close().finally(() => app.quit());
+  void closable.close().finally(() => app.quit());
 });

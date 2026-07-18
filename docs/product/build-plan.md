@@ -184,15 +184,27 @@ local trusted UI; the desktop main **proxies** the room to the hosted engine,
 and the bridge dials it outbound — the engine sees room data, never the repo,
 credentials, or host-window code.
 
-_Done + verified:_ the hosted engine (the same `apps/server`) now takes a
+_Hosted engine (done + verified):_ the same `apps/server` now takes a
 configurable bind (`CLAUDEROOMS_HOST`, loopback by default), an optional
 `CLAUDEROOMS_STATIC_DIR`, and a public origin allow-list. Run standalone it
 serves the web client and hosts rooms with invitations — exactly what a remote
 guest connects to (`docs/deploy/hosted-engine.md`, `config.test.ts`).
 
-_Remaining:_ the desktop main-process proxy (host drives a hosted room), a real
-TLS-fronted deployment, and a cross-network guest join. **Accepted when:** a
-downloaded app hosts a room a remote guest can join from another network.
+_Host-side proxy (done + verified):_ `CLAUDEROOMS_ENGINE_URL` puts the desktop
+in hosted mode. `hosted-proxy.ts` serves the bundled web client from a loopback
+origin (the host window never loads the hosted engine's code) and forwards
+`/api` + `/ws` to the hosted engine — dialing the WebSocket with the **hosted**
+Origin so the engine's allow-list stays tight. The bridge dials the hosted
+engine directly. Verified against a real hosted engine whose allow-list
+contains only its own origin: static comes from the proxy, a room is created
+through it, and the WS authenticates end-to-end — which only works because the
+proxy sets the hosted Origin (`hosted-proxy.test.ts`, 3 tests).
+
+_Remaining (the physical half of the acceptance):_ a real TLS-fronted
+deployment on a public host and a guest join over an actual network — the
+mechanism is proven locally; this needs infrastructure, not code. **Accepted
+when:** a downloaded app hosts a room a remote guest can join from another
+network.
 
 ## Milestone 7 — Safe write actions
 

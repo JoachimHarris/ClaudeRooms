@@ -62,7 +62,8 @@ rooms.example.com {
 ## Status
 
 The hosted engine (serving the web client + hosting rooms + accepting the
-bridge) runs from this configuration today and is verified locally. The
-desktop app's proxy that lets a host drive a hosted room, plus a real
-TLS-fronted deployment and a cross-network guest join, are the remaining work
-for this milestone.
+bridge) runs from this configuration today, and the desktop app's hosted mode —
+`CLAUDEROOMS_ENGINE_URL` puts it behind a loopback proxy that forwards room
+data to this engine (ADR-0010) — is implemented and verified locally against a
+real hosted engine. The only remaining work is operational: a real TLS-fronted
+deployment on a public host and a guest join over an actual network.
