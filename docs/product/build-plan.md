@@ -114,6 +114,18 @@ inside the host process before any text reaches the engine (hard guard on the
 durable answer, unit + mutation tested), with the system prompt asking for
 repo-relative paths as defence in depth.
 
+_Found in live verification (more serious):_ the whole `canUseTool` gate was
+never being called. With `allowedTools: []` the SDK still auto-approves
+read-only tools in the default permission mode, so `RepoAccessPolicy` never
+ran and a "read `.env`" would have leaked the secret — the unit tests passed
+because they test `checkToolCall` directly, never the SDK's decision to call
+it. Fixed by forcing every available tool onto the permission `ask` list
+(`settings.permissions.ask = REPOSITORY_READ_TOOLS`). Verified against live
+Claude: `canUseTool` now fires, and a real `.env` read is denied with its
+contents withheld. This is the same lesson as M3 — the SDK's tool/permission
+options do not mean what their names suggest, so each gate must be proven by
+watching real behaviour, not by trusting the option.
+
 **Step 2c ✅ — the work card.** The repo-access audit is no longer a flat
 system line: `claude.repo_access` renders as a collapsible work card in the
 timeline (`<details>`/`<summary>`, collapsed by default), summarising "Claude

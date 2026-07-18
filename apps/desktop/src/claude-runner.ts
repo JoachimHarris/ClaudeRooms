@@ -110,9 +110,19 @@ export function runRepositoryRead(input: {
           // Still [] — this loads user/project settings and would drag
           // CLAUDE.md into the prompt (proven in Milestone 3).
           settingSources: [],
-          // Still [] — auto-approve nothing, so every call reaches
-          // canUseTool below and is checked against the policy.
+          // Still [] — auto-approve nothing.
           allowedTools: [],
+          // LOAD-BEARING (proven in Milestone 5 testing). `allowedTools: []`
+          // is NOT enough: in the default permission mode the SDK treats
+          // read-only tools (Read/Glob) as safe and auto-approves them
+          // *without ever calling canUseTool* — so RepoAccessPolicy never ran
+          // and a collaborator's "read .env" would have succeeded. Forcing
+          // every available tool onto the `ask` list routes each call through
+          // canUseTool below, which is where the policy is enforced. Verified:
+          // with this line a `.env` read is denied; without it, canUseTool
+          // fires zero times and the read goes through. Keep `ask` === the
+          // available-tools set so no tool can be auto-approved by omission.
+          settings: { permissions: { ask: REPOSITORY_READ_TOOLS } },
           canUseTool: async (toolName, toolInput) => {
             const decision = checkToolCall(policy, toolName, toolInput);
             if (!decision.allowed) {

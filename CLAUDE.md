@@ -36,9 +36,13 @@ security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
   load-bearing and were each proven necessary; do not remove one without
   re-running the CLAUDE.md leak test**. For `repository_read` the same gates
   stay except tool availability (`Read`/`Glob`), with every call routed through
-  `canUseTool` → `checkToolCall` in `src/tool-gate.ts`, and **all output run
-  through `redactRepoRoots` so the host's absolute path never reaches the
-  engine** (proven necessary — Claude echoed it in testing). `tool-gate.ts` is
+  `canUseTool` → `checkToolCall` in `src/tool-gate.ts`. **`canUseTool` only
+  runs because every available tool is forced onto `settings.permissions.ask`;
+  without that line the SDK auto-approves reads in the default permission mode
+  and the policy is silently bypassed (proven in live testing — `.env` was
+  readable). Do not remove it.** All output is run through `redactRepoRoots`
+  so the host's absolute path never reaches the engine (proven necessary —
+  Claude echoed it in testing). `tool-gate.ts` is
   kept SDK-free so the security logic is unit-testable. `src/bridge-client.ts`
   connects outbound to the engine. `src/room-store.ts` holds host credentials
   encrypted via `safeStorage` — **never add a plaintext fallback** (ADR-0008).
