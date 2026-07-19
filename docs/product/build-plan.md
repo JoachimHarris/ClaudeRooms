@@ -272,9 +272,17 @@ the same rules — and exposes three tools: `list_decisions`, `list_messages`,
   real engine (`room-client.test.ts`, 3 tests): it authenticates with a session
   token, reads a seeded decision + message from the snapshot, posts a message the
   engine broadcasts back, and rejects a bad token instead of hanging. Wiring is
-  documented in `apps/mcp/README.md`. _Remaining:_ a live Claude Desktop/Code
-  round-trip and the optional terminal "pro mode" (session mirror via Claude Code
-  hooks).
+  documented in `apps/mcp/README.md`.
+
+**Step 3 ✅ — terminal pro mode.** A Claude Code hook runner (`hook.ts`)
+mirrors a terminal session into a room: Claude Code invokes it on an event with
+the event JSON on stdin, and `formatHookEvent` turns the worth-sharing ones —
+the human's prompts, session start/end markers — into a room line, dropping
+tool spam and Claude's full output. It reuses `RoomClient` to post, and **exits
+0 no matter what** so a mirror failure never breaks the terminal session. The
+formatter is pure and unit-tested (5 tests); the hook config is in the README.
+_Remaining M8:_ a live Claude Desktop/Code round-trip and a live hook
+round-trip — the mechanisms are built and unit-tested.
 
 ## Deferred / follow-ups
 

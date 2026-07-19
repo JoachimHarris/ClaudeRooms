@@ -18,8 +18,11 @@ unit-tested) so a future Claude session in the repo reads them as context like
 only). Step 2 is done: `@clauderooms/mcp` (`apps/mcp`) is a stdio MCP server the
 host points Claude Desktop/Code at (session-token auth, `list_decisions` /
 `list_messages` / `post_message`); the room logic is a testable `RoomClient`
-verified against a real engine. Remaining M8: a live Claude Desktop/Code
-round-trip + the optional terminal pro-mode.
+verified against a real engine. Pro mode is done too: a Claude Code hook runner
+(`apps/mcp/src/hook.ts` + `mirror-hook.ts`) mirrors a terminal session's
+prompts into a room, exiting 0 on any failure so it never breaks the terminal.
+Remaining M8: live Claude Desktop/Code + hook round-trips (mechanisms built +
+unit-tested).
 
 Milestone 7 done: safe writes. ADR-0011 sets the model — Claude
 _proposes_ `{path, content}` with read-only tools and never writes; the host

@@ -5,10 +5,12 @@
   "description": "ClaudeRooms MCP server — point Claude Desktop/Code at a room",
   "type": "module",
   "bin": {
-    "clauderooms-mcp": "src/index.ts"
+    "clauderooms-mcp": "src/index.ts",
+    "clauderooms-mirror": "src/hook.ts"
   },
   "scripts": {
     "start": "tsx src/index.ts",
+    "mirror": "tsx src/hook.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
     "test": "vitest run"

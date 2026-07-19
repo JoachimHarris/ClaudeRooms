@@ -50,9 +50,53 @@ Add an entry to the MCP servers config (Claude Desktop's `mcpServers`, or
 For a locally hosted room, use the embedded engine's URL (e.g.
 `http://127.0.0.1:3001`).
 
+## Pro mode — mirror a terminal Claude Code session into a room
+
+A power user working in Claude Code in the terminal can mirror what the session
+is driving at into a ClaudeRooms room, using Claude Code **hooks**. The runner
+(`src/hook.ts`) reads the hook event on stdin and posts the worth-sharing lines
+(the human's prompts, and session start/end markers — never tool spam or
+Claude's full output). It uses the same two env vars, and **never fails the
+terminal session**: any error exits 0 silently.
+
+Configure the hooks in Claude Code settings (`~/.claude/settings.json` or the
+project's `.claude/settings.json`):
+
+```json
+{
+  "env": {
+    "CLAUDEROOMS_ENGINE_URL": "https://rooms.example.com",
+    "CLAUDEROOMS_SESSION_TOKEN": "<a room session token>"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "pnpm --filter @clauderooms/mcp mirror" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "pnpm --filter @clauderooms/mcp mirror" }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "pnpm --filter @clauderooms/mcp mirror" }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## Status
 
-The engine client (`room-client.ts` — auth, read decisions/messages, post) is
-tested against a real engine. Wiring it into a live Claude Desktop/Code client
-and the optional terminal "pro mode" (session mirror via Claude Code hooks)
-are the remaining Milestone 8 work.
+The engine client (`room-client.ts` — auth, read decisions/messages, post) and
+the pro-mode hook formatter (`mirror-hook.ts`) are unit-tested (the former
+against a real engine). Wiring the MCP server into a live Claude Desktop/Code
+client, and a live hook round-trip, are the remaining Milestone 8 verification.
