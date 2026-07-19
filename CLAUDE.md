@@ -15,7 +15,11 @@ done: a room's decisions export to `<repo>/.clauderooms/DECISIONS.md`
 (`apps/desktop/src/decisions-export.ts`, pure renderer + fixed-path writer,
 unit-tested) so a future Claude session in the repo reads them as context like
 `CLAUDE.md`; the host re-exports on any decisions change (host + connected repo
-only). Step 2 (a ClaudeRooms MCP server + terminal pro-mode) is next.
+only). Step 2 is done: `@clauderooms/mcp` (`apps/mcp`) is a stdio MCP server the
+host points Claude Desktop/Code at (session-token auth, `list_decisions` /
+`list_messages` / `post_message`); the room logic is a testable `RoomClient`
+verified against a real engine. Remaining M8: a live Claude Desktop/Code
+round-trip + the optional terminal pro-mode.
 
 Milestone 7 done: safe writes. ADR-0011 sets the model — Claude
 _proposes_ `{path, content}` with read-only tools and never writes; the host
@@ -84,6 +88,10 @@ security in `docs/security/threat-model.md`, decisions in `docs/decisions/`.
   encrypted via `safeStorage` — **never add a plaintext fallback** (ADR-0008).
   Security posture (contextIsolation, sandbox, navigation lock) must never be
   weakened.
+- `apps/mcp` — `@clauderooms/mcp`, a stdio MCP server (M8) the host points
+  Claude Desktop/Code at. `src/room-client.ts` joins a room over the WS protocol
+  with a session token (testable, no MCP client needed); `src/index.ts` is thin
+  MCP glue exposing `list_decisions`/`list_messages`/`post_message`.
 
 ## Commands
 

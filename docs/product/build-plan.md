@@ -67,7 +67,7 @@ full restart, opens with its history, and its bridge reconnects; the store
 on disk contains no readable tokens; guests are unaffected. All verified in
 the app.
 
-## Milestone 5 — Repository-aware Claude (in progress)
+## Milestone 5 — Repository-aware Claude ✅
 
 `repository_read` mode: host-approved, scoped file access (the gates in
 Milestone 3 are lifted per request, never globally), shared summaries of what
@@ -261,11 +261,20 @@ repo root. The host's desktop re-exports whenever decisions change (host + a
 connected repo only; the payload is display data, host-local, never to the
 engine). SDK-free and unit-tested (6 tests). `docs/product/build-plan.md`.
 
-**Step 2 — the MCP server.** A small ClaudeRooms MCP server the host points
-Claude Desktop / Claude Code at, exposing tools to read a room's decisions and
-messages and post an update — authenticated with a room session token, talking
-to the engine over its existing protocol. Then the optional terminal "pro
-mode" (session mirror via Claude Code hooks).
+**Step 2 ✅ — the MCP server.** `@clauderooms/mcp` (`apps/mcp`) is a stdio MCP
+server the host points Claude Desktop / Claude Code at, configured with a
+room's engine URL + session token. It joins the room as an ordinary participant
+over the same WebSocket protocol the web client uses — so the engine enforces
+the same rules — and exposes three tools: `list_decisions`, `list_messages`,
+`post_message`. The room logic lives in a testable `RoomClient` (auth, snapshot
+
+- live events, post); the MCP layer is thin glue over it. Verified against a
+  real engine (`room-client.test.ts`, 3 tests): it authenticates with a session
+  token, reads a seeded decision + message from the snapshot, posts a message the
+  engine broadcasts back, and rejects a bad token instead of hanging. Wiring is
+  documented in `apps/mcp/README.md`. _Remaining:_ a live Claude Desktop/Code
+  round-trip and the optional terminal "pro mode" (session mirror via Claude Code
+  hooks).
 
 ## Deferred / follow-ups
 
