@@ -56,6 +56,10 @@ interface ClaudeRoomsDesktopBridge {
     path: string;
     content: string;
   }) => Promise<{ ok: boolean; path?: string; reason?: string }>;
+  /** Exports decisions to .clauderooms/DECISIONS.md (M8); host UI only. */
+  exportDecisions: (input: {
+    decisions: unknown[];
+  }) => Promise<{ ok: boolean; path?: string; reason?: string }>;
 }
 
 interface Window {

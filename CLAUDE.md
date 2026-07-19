@@ -10,7 +10,14 @@ README and UI.
 
 ## Current stage
 
-Milestone 7 in progress: safe writes. ADR-0011 sets the model — Claude
+Milestone 8 in progress: Claude Desktop/Code integration (additive). Step 1 is
+done: a room's decisions export to `<repo>/.clauderooms/DECISIONS.md`
+(`apps/desktop/src/decisions-export.ts`, pure renderer + fixed-path writer,
+unit-tested) so a future Claude session in the repo reads them as context like
+`CLAUDE.md`; the host re-exports on any decisions change (host + connected repo
+only). Step 2 (a ClaudeRooms MCP server + terminal pro-mode) is next.
+
+Milestone 7 done: safe writes. ADR-0011 sets the model — Claude
 _proposes_ `{path, content}` with read-only tools and never writes; the host
 process executes on per-proposal approval, so approval-before-execution is
 structural. Step 1 is done: `RepoWritePolicy` +

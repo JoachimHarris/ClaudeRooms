@@ -8,6 +8,7 @@ import { RoomStore, toSummary, type StoredRoom } from "./room-store.js";
 import { startEmbeddedEngine, type EmbeddedEngine } from "./engine.js";
 import { startHostedProxy, type HostedProxy } from "./hosted-proxy.js";
 import { RepoWritePolicy, WriteRefused, applyWrite } from "./write-access.js";
+import { exportDecisions } from "./decisions-export.js";
 
 // main runs as ESM (the Agent SDK is ESM-only), so __dirname must be derived.
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -186,6 +187,47 @@ ipcMain.handle("clauderooms:apply-write", async (_event, raw: unknown) => {
     return {
       ok: false,
       reason: error instanceof WriteRefused ? error.message : "the write failed",
+    };
+  }
+});
+
+const decisionExportSchema = z.object({
+  decisions: z
+    .array(
+      z.object({
+        id: z.string(),
+        roomId: z.string(),
+        title: z.string(),
+        statement: z.string(),
+        rationale: z.string().nullable(),
+        status: z.enum(["proposed", "accepted", "rejected"]),
+        createdByParticipantId: z.string(),
+        resolvedByParticipantId: z.string().nullable(),
+        sourceMessageId: z.string().nullable(),
+        createdAt: z.string(),
+        resolvedAt: z.string().nullable(),
+      }),
+    )
+    .max(1000),
+});
+
+/**
+ * Exports the room's decisions to `<repo>/.clauderooms/DECISIONS.md` (M8), so a
+ * future Claude session in the repo picks them up as context. Host + connected
+ * repo only; the input is display data (no credentials), written to one fixed
+ * path.
+ */
+ipcMain.handle("clauderooms:export-decisions", async (_event, raw: unknown) => {
+  const parsed = decisionExportSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: "invalid input" };
+  if (!currentRepoPath) return { ok: false, reason: "no repository connected" };
+  try {
+    const { relativePath } = exportDecisions(currentRepoPath, parsed.data.decisions);
+    return { ok: true, path: relativePath };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "export failed",
     };
   }
 });

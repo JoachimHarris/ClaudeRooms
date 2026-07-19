@@ -27,4 +27,8 @@ electron.contextBridge.exposeInMainWorld("clauderooms", {
   // re-checks every path against RepoWritePolicy.
   applyWrite: (input: { path: string; content: string }) =>
     electron.ipcRenderer.invoke("clauderooms:apply-write", input),
+  // Exports the room's decisions to .clauderooms/DECISIONS.md for a future
+  // Claude session's context (M8). Host + connected repo only.
+  exportDecisions: (input: unknown) =>
+    electron.ipcRenderer.invoke("clauderooms:export-decisions", input),
 });
