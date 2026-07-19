@@ -100,6 +100,16 @@ export function RoomPage({ roomId }: { roomId: string }) {
     return () => connection.stop();
   }, [roomId, session]);
 
+  // Export decisions to <repo>/.clauderooms/DECISIONS.md whenever they change,
+  // so a future Claude session in the repo picks them up as context (M8).
+  // Host with a connected repo only; the export is display data, host-local.
+  useEffect(() => {
+    if (!window.clauderooms || state.self?.role !== "host") return;
+    const decisions = Object.values(state.decisions);
+    if (decisions.length === 0) return;
+    void window.clauderooms.exportDecisions({ decisions });
+  }, [state.decisions, state.self?.role]);
+
   if (resolving) {
     return (
       <main className="centered-page">

@@ -243,12 +243,29 @@ can't be marked applied; a refused write is reported failed, not silently
 succeeded. Letting Claude read + emit the proposal itself (a `propose_write`
 tool, a second read gate) remains the deferred autonomy enhancement.
 
-## Milestone 8 — Claude Desktop/Code integration (additive)
+## Milestone 8 — Claude Desktop/Code integration (additive, in progress)
 
 A ClaudeRooms MCP server so the host's Claude Desktop or Claude Code can
 talk to rooms (post updates, read decisions), plus the optional terminal
 "pro mode" (session mirror via Claude Code hooks). Decisions exported to
 `.clauderooms/DECISIONS.md` for automatic context in future sessions.
+
+**Step 1 ✅ — decisions as a context file.** The most Claude-Code-native
+integration: a room's decisions are exported to `<repo>/.clauderooms/DECISIONS.md`
+(the `.clauderooms/` convention, alongside `.claude/`), so a future Claude
+session in the repo reads them as context the way it reads `CLAUDE.md`.
+`renderDecisionsMarkdown` is pure (decisions in, deterministic markdown out,
+sorted by creation time so an unchanged set re-exports byte-identical — no
+spurious diffs); `exportDecisions` writes only the one fixed path under the
+repo root. The host's desktop re-exports whenever decisions change (host + a
+connected repo only; the payload is display data, host-local, never to the
+engine). SDK-free and unit-tested (6 tests). `docs/product/build-plan.md`.
+
+**Step 2 — the MCP server.** A small ClaudeRooms MCP server the host points
+Claude Desktop / Claude Code at, exposing tools to read a room's decisions and
+messages and post an update — authenticated with a room session token, talking
+to the engine over its existing protocol. Then the optional terminal "pro
+mode" (session mirror via Claude Code hooks).
 
 ## Deferred / follow-ups
 
