@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createRoom, describeApiError } from "../api.js";
 import { navigate } from "../router.js";
 import { saveSession } from "../session.js";
+import { openHelp } from "../App.js";
 
 interface PickedRepo {
   repositoryName: string;
@@ -83,7 +84,17 @@ function HostHome() {
   return (
     <main className="centered-page">
       <div className="landing">
-        <h1>Start a session</h1>
+        <div className="landing-head">
+          <h1>Start a session</h1>
+          <button
+            className="btn small subtle"
+            type="button"
+            onClick={openHelp}
+            title="How ClaudeRooms works"
+          >
+            ? Help
+          </button>
+        </div>
         <p className="muted small">
           Pick the repository you are working on, then invite your collaborator.
         </p>

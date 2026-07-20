@@ -9,6 +9,7 @@ import { Timeline } from "../components/Timeline.js";
 import { Composer, type ComposerMode } from "../components/Composer.js";
 import { ApprovalStrip } from "../components/ApprovalStrip.js";
 import { DecisionsPanel, type DecisionPrefill } from "../components/DecisionsPanel.js";
+import { openHelp } from "../App.js";
 
 function connectionLabel(connection: string): string {
   switch (connection) {
@@ -199,6 +200,19 @@ export function RoomPage({ roomId }: { roomId: string }) {
     sendOrWarn({ type: "room.end" });
   }
 
+  // Re-connect the repo folder for this session (the absolute path is never
+  // persisted — ADR-0008 — so a remembered room needs it re-picked before
+  // Claude can read or write). Host + desktop only.
+  async function connectRepo() {
+    const picked = await window.clauderooms?.pickRepo();
+    if (picked) {
+      dispatch({
+        type: "notice",
+        text: `Repository connected: ${picked.repositoryName}. Claude can read it now.`,
+      });
+    }
+  }
+
   return (
     <div className="room-layout">
       <header className="room-header">
@@ -213,6 +227,14 @@ export function RoomPage({ roomId }: { roomId: string }) {
           )}
         </div>
         <div className="room-controls">
+          <button
+            className="btn small subtle"
+            onClick={openHelp}
+            title="How a room works"
+            aria-label="How a room works"
+          >
+            ? Help
+          </button>
           <span
             className={`conn-badge ${state.connection}`}
             role="status"
@@ -220,6 +242,11 @@ export function RoomPage({ roomId }: { roomId: string }) {
           >
             {connectionLabel(state.connection)}
           </span>
+          {isHost && window.clauderooms && state.room?.status === "open" && (
+            <button className="btn small" onClick={connectRepo}>
+              Connect repo folder
+            </button>
+          )}
           {isHost && session.inviteToken && state.room?.status === "open" && (
             <button className="btn small" onClick={copyInvite}>
               {copied ? "Copied ✓" : "Copy invitation link"}

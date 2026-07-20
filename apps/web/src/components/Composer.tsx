@@ -3,6 +3,17 @@ import { LIMITS } from "@clauderooms/shared";
 
 export type ComposerMode = "room" | "claude" | "claude-repo" | "propose-write";
 
+// A one-line, plain-language explanation of the selected mode, shown under the
+// composer so the modes explain themselves in place (no jargon to memorise).
+const MODE_HINT: Record<ComposerMode, string> = {
+  room: "A normal message to the room. Claude is not involved.",
+  claude: "Claude answers here, but cannot see your repository — discussion only.",
+  "claude-repo":
+    "Claude reads repository files — the host must approve the request first.",
+  "propose-write":
+    "Suggest a file change. The host reviews the exact path and contents and approves before anything is written.",
+};
+
 export function Composer({
   disabled,
   onSend,
@@ -51,10 +62,10 @@ export function Composer({
         onChange={(e) => setMode(e.target.value as ComposerMode)}
         disabled={disabled}
       >
-        <option value="room">Message room</option>
-        <option value="claude">Ask Claude</option>
-        <option value="claude-repo">Ask Claude: use repository</option>
-        <option value="propose-write">Propose a file write</option>
+        <option value="room">Message the room</option>
+        <option value="claude">Ask Claude — chat only</option>
+        <option value="claude-repo">Ask Claude — read the repo</option>
+        <option value="propose-write">Propose a file change</option>
       </select>
       {isWrite && (
         <input
@@ -114,6 +125,8 @@ export function Composer({
               ? "Ask Claude"
               : "Send"}
       </button>
+      {/* Self-explaining: what the selected mode does, in plain language. */}
+      <p className="composer-hint">{MODE_HINT[mode]}</p>
     </form>
   );
 }
